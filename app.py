@@ -1,151 +1,92 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 
-# ==========================
-# إعداد الصفحة
-# ==========================
 st.set_page_config(
-    page_title="Yarn Quality Dashboard",
+    page_title="Carding Quality Dashboard",
     page_icon="🧵",
     layout="wide"
 )
 
-st.title("🧵 Yarn Quality Dashboard")
-st.subheader("تحليل جودة الخيوط - إدارة الجودة")
+st.title("🧵 Carding Quality Dashboard")
+st.subheader("تحليل جودة مرحلة الكارد")
 
-# ==========================
-# رفع الملف
-# ==========================
 uploaded_file = st.file_uploader(
-    "📂 اختر ملف الجودة",
-    type=["xlsx", "xls", "csv"]
+    "تحميل ملف بيانات الكارد",
+    type=["xlsx","xls","csv"]
 )
 
 if uploaded_file is None:
-    st.info("⬆️ قم برفع ملف الجودة أولاً")
+    st.info("قم برفع ملف البيانات")
     st.stop()
 
-# ==========================
-# قراءة الملف
-# ==========================
 try:
+
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
+
     else:
         df = pd.read_excel(uploaded_file)
 
 except Exception as e:
-    st.error(f"خطأ في قراءة الملف: {e}")
+    st.error(str(e))
     st.stop()
 
-# ==========================
-# عرض البيانات
-# ==========================
-st.success("✅ تم تحميل الملف بنجاح")
+st.success("تم تحميل البيانات بنجاح")
 
-st.write("### البيانات الأصلية")
-st.dataframe(df, use_container_width=True)
+st.dataframe(df)
 
-# ==========================
-# تنظيف أسماء الأعمدة
-# ==========================
-df.columns = df.columns.str.strip()
+# KPI
 
-required_columns = [
-    "Product",
-    "Act.Count",
-    "THIN",
-    "THICK",
-    "NEPS",
-    "IPI",
-    "RKM",
-    "ELG",
-    "Bforce",
-    "C.V m"
-]
+st.header("📊 مؤشرات الأداء")
 
-missing_columns = [col for col in required_columns if col not in df.columns]
+col1,col2,col3,col4 = st.columns(4)
 
-if missing_columns:
-    st.error(f"الأعمدة التالية غير موجودة: {missing_columns}")
-    st.stop()
+with col1:
+    st.metric(
+        "متوسط CV%",
+        round(df["CV"].mean(),2)
+    )
 
-# ==========================
-# مؤشرات KPI
-# ==========================
-st.markdown("---")
-st.header("📊 مؤشرات الجودة الرئيسية")
+with col2:
+    st.metric(
+        "متوسط Neps",
+        round(df["Neps"].mean(),0)
+    )
 
-col1, col2, col3, col4, col5 = st.columns(5)
+with col3:
+    st.metric(
+        "متوسط الكفاءة",
+        round(df["Efficiency"].mean(),1)
+    )
 
-col1.metric(
-    "متوسط IPI",
-    round(df["IPI"].mean(), 0)
-)
+with col4:
+    st.metric(
+        "عدد النمر",
+        df["Count"].nunique()
+    )
 
-col2.metric(
-    "متوسط RKM",
-    round(df["RKM"].mean(), 2)
-)
+# تحليل النمر
 
-col3.metric(
-    "متوسط Bforce",
-    round(df["Bforce"].mean(), 0)
-)
+st.header("📈 تحليل النمر")
 
-col4.metric(
-    "متوسط CVm%",
-    round(df["C.V m"].mean(), 2)
-)
-
-col5.metric(
-    "عدد المنتجات",
-    df["Product"].nunique()
-)
-
-# ==========================
-# تحليل المنتجات
-# ==========================
-st.markdown("---")
-st.header("📈 التحليل حسب المنتج")
-
-summary = df.groupby("Product").agg({
-    "Act.Count": "mean",
-    "THIN": "mean",
-    "THICK": "mean",
-    "NEPS": "mean",
-    "IPI": "mean",
-    "RKM": "mean",
-    "ELG": "mean",
-    "Bforce": "mean",
-    "C.V m": "mean"
+summary = df.groupby("Count").agg({
+    "CV":"mean",
+    "Neps":"mean",
+    "Efficiency":"mean"
 }).reset_index()
 
-# ==========================
-# تقييم الجودة
-# ==========================
-def quality_rating(row):
+def rating(row):
 
     score = 100
 
-    if row["IPI"] > 250:
-        score -= 25
+    if row["CV"] > 4.5:
+        score -= 30
 
-    if row["C.V m"] > 14:
-        score -= 20
+    if row["Neps"] > 150:
+        score -= 30
 
-    if row["RKM"] < 15:
-        score -= 20
-
-    if row["Bforce"] < 300:
-        score -= 20
-
-    if row["THICK"] > 100:
-        score -= 10
-
-    if row["THIN"] > 5:
-        score -= 5
+    if row["Efficiency"] < 85:
+        score -= 40
 
     if score >= 85:
         return "ممتاز"
@@ -160,171 +101,92 @@ def quality_rating(row):
         return "ضعيف"
 
 summary["التقييم"] = summary.apply(
-    quality_rating,
+    rating,
     axis=1
 )
 
-st.dataframe(
-    summary,
-    use_container_width=True
-)
+st.dataframe(summary)
 
-# ==========================
 # الاستنتاجات
-# ==========================
-st.markdown("---")
-st.header("📋 الاستنتاجات")
+
+st.header("📋 استنتاجات الجودة")
 
 for _, row in summary.iterrows():
 
     notes = []
 
-    if row["IPI"] > 250:
-        notes.append("ارتفاع مؤشر العيوب IPI")
+    if row["CV"] > 4.5:
+        notes.append("ارتفاع CV يدل على عدم انتظام الشعيرات")
 
-    if row["THIN"] > 5:
-        notes.append("زيادة أماكن الرفيع")
+    if row["Neps"] > 150:
+        notes.append("ارتفاع النبس يحتاج مراجعة الكارد")
 
-    if row["THICK"] > 100:
-        notes.append("زيادة أماكن السميك")
+    if row["Efficiency"] < 85:
+        notes.append("انخفاض كفاءة الماكينة")
 
-    if row["NEPS"] > 150:
-        notes.append("زيادة النبس")
-
-    if row["RKM"] < 15:
-        notes.append("انخفاض المتانة")
-
-    if row["Bforce"] < 300:
-        notes.append("انخفاض قوة الشد")
-
-    if row["C.V m"] > 14:
-        notes.append("عدم انتظامية مرتفعة")
-
-    if len(notes) == 0:
-        notes.append("الجودة مطابقة للمواصفات")
+    if not notes:
+        notes.append("جودة مستقرة")
 
     st.info(
         f"""
-المنتج : {row['Product']}
+نمرة {row['Count']}
 
 التقييم : {row['التقييم']}
 
-{" | ".join(notes)}
+{' | '.join(notes)}
 """
     )
 
-# ==========================
-# الرسوم البيانية
-# ==========================
-st.markdown("---")
-st.header("📊 الرسوم البيانية")
-
-fig1 = px.bar(
-    summary,
-    x="Product",
-    y="IPI",
-    color="التقييم",
-    title="IPI حسب المنتج"
-)
-
-st.plotly_chart(fig1, use_container_width=True)
-
-fig2 = px.bar(
-    summary,
-    x="Product",
-    y="RKM",
-    color="التقييم",
-    title="RKM حسب المنتج"
-)
-
-st.plotly_chart(fig2, use_container_width=True)
-
-fig3 = px.bar(
-    summary,
-    x="Product",
-    y="Bforce",
-    color="التقييم",
-    title="Bforce حسب المنتج"
-)
-
-st.plotly_chart(fig3, use_container_width=True)
-
-# ==========================
-# مقارنة LOT
-# ==========================
-st.markdown("---")
-st.header("📦 مقارنة اللوطات")
-
-if "LOT" in df.columns:
-
-    lot_summary = df.groupby("LOT").agg({
-        "IPI": "mean",
-        "RKM": "mean",
-        "Bforce": "mean"
-    }).reset_index()
-
-    st.dataframe(
-        lot_summary,
-        use_container_width=True
-    )
-
-    fig4 = px.bar(
-        lot_summary,
-        x="LOT",
-        y="IPI",
-        color="LOT",
-        title="مقارنة IPI بين اللوطات"
-    )
-
-    st.plotly_chart(fig4, use_container_width=True)
-
-# ==========================
 # مقارنة الخلطات
-# ==========================
-st.markdown("---")
+
 st.header("🧪 تحليل الخلطات")
 
-if "BLEND" in df.columns:
+blend_summary = df.groupby("Blend").agg({
+    "CV":"mean",
+    "Neps":"mean",
+    "Efficiency":"mean"
+}).reset_index()
 
-    blend_summary = df.groupby("BLEND").agg({
-        "IPI": "mean",
-        "RKM": "mean",
-        "Bforce": "mean"
+st.dataframe(blend_summary)
+
+# مقارنة الماكينات
+
+if "Machine" in df.columns:
+
+    st.header("⚙️ أداء الماكينات")
+
+    machine_summary = df.groupby("Machine").agg({
+        "CV":"mean",
+        "Neps":"mean",
+        "Efficiency":"mean"
     }).reset_index()
 
-    st.dataframe(
-        blend_summary,
-        use_container_width=True
-    )
+    st.dataframe(machine_summary)
 
-# ==========================
-# تصفية حسب المنتج
-# ==========================
-st.markdown("---")
-st.header("🔍 عرض تفاصيل منتج")
+# فلتر النمرة
 
-selected_product = st.selectbox(
-    "اختر المنتج",
-    df["Product"].unique()
+st.header("🔍 تفاصيل نمرة")
+
+selected_count = st.selectbox(
+    "اختر النمرة",
+    sorted(df["Count"].unique())
 )
 
-filtered = df[df["Product"] == selected_product]
+filtered = df[
+    df["Count"] == selected_count
+]
 
-st.dataframe(
-    filtered,
-    use_container_width=True
-)
+st.dataframe(filtered)
 
-# ==========================
-# تحميل CSV
-# ==========================
+# تحميل
+
 csv = filtered.to_csv(
     index=False
 ).encode("utf-8-sig")
 
 st.download_button(
-    "📥 تحميل البيانات",
+    "📥 تحميل التقرير",
     csv,
-    "quality_report.csv",
+    "carding_report.csv",
     "text/csv"
 )

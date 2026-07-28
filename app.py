@@ -1,10 +1,6 @@
 import streamlit as st
 import pandas as pd
 
-# ==========================
-# Page Config
-# ==========================
-
 st.set_page_config(
     page_title="Carding Quality Dashboard",
     page_icon="🧵",
@@ -12,11 +8,6 @@ st.set_page_config(
 )
 
 st.title("🧵 Carding Quality Dashboard")
-st.write("تحليل جودة مرحلة الكارد")
-
-# ==========================
-# Upload File
-# ==========================
 
 uploaded_file = st.file_uploader(
     "تحميل ملف البيانات",
@@ -24,33 +15,19 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is None:
-    st.info("قم برفع ملف البيانات أولاً")
     st.stop()
 
-# ==========================
-# Read File
-# ==========================
+# قراءة الملف
+if uploaded_file.name.endswith(".csv"):
+    df = pd.read_csv(uploaded_file)
+else:
+    df = pd.read_excel(uploaded_file)
 
-try:
-
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-
-    else:
-        df = pd.read_excel(uploaded_file)
-
-except Exception as e:
-
-    st.error(f"خطأ في قراءة الملف: {e}")
-    st.stop()
-
-# ==========================
-# Clean Columns
-# ==========================
-
+# تنظيف أسماء الأعمدة
 df.columns = df.columns.str.strip()
 
-required_columns = [
+# الأعمدة المطلوبة
+required = [
     "M.C",
     "Lot",
     "Count",
@@ -60,86 +37,58 @@ required_columns = [
     "Blend"
 ]
 
-missing = [
-    col for col in required_columns
-    if col not in df.columns
-]
+for col in required:
+    if col not in df.columns:
+        st.error(f"العمود غير موجود: {col}")
+        st.write(df.columns.tolist())
+        st.stop()
 
-if missing:
-    st.error(f"الأعمدة المفقودة: {missing}")
-    st.write(df.columns.tolist())
-    st.stop()
+# تحويل البيانات
 
-# ==========================
-# Convert Data
-# ==========================
+df["Count"] = pd.to_numeric(df["Count"], errors="coerce")
+df["CV"] = pd.to_numeric(df["CV"], errors="coerce")
+df["Neps"] = pd.to_numeric(df["Neps"], errors="coerce")
 
-df["Count"] = pd.to_numeric(
-    df["Count"],
-    errors="coerce"
+# تحويل الكفاءة إلى %
+
+df["Ner%"] = (
+    pd.to_numeric(df["Ner%"], errors="coerce")
+    * 100
 )
 
-df["CV"] = pd.to_numeric(
-    df["CV"],
-    errors="coerce"
-)
-
-df["Neps"] = pd.to_numeric(
-    df["Neps"],
-    errors="coerce"
-)
-
-df["Ner%"] = pd.to_numeric(
-    df["Ner%"],
-    errors="coerce"
-) * 100
-
-# ==========================
-# Data View
-# ==========================
-
-st.header("📋 البيانات")
-
-st.dataframe(
-    df,
-    use_container_width=True
-)
-
-# ==========================
 # KPI
-# ==========================
 
 st.header("📊 مؤشرات الجودة")
 
-k1, k2, k3, k4 = st.columns(4)
+c1, c2, c3, c4 = st.columns(4)
 
-with k1:
-    st.metric(
-        "متوسط النمرة",
-        f"{df['Count'].mean():.2f}"
-    )
+c1.metric(
+    "متوسط النمرة",
+    f"{df['Count'].mean():.2f}"
+)
 
-with k2:
-    st.metric(
-        "متوسط CV",
-        f"{df['CV'].mean():.2f}"
-    )
+c2.metric(
+    "متوسط CV",
+    f"{df['CV'].mean():.2f}"
+)
 
-with k3:
-    st.metric(
-        "متوسط Neps",
-        f"{df['Neps'].mean():.0f}"
-    )
+c3.metric(
+    "متوسط Neps",
+    f"{df['Neps'].mean():.0f}"
+)
 
-with k4:
-    st.metric(
-        "متوسط الكفاءة",
-        f"{df['Ner%'].mean():.1f}%"
-    )
+c4.metric(
+    "متوسط الكفاءة",
+    f"{df['Ner%'].mean():.1f}%"
+)
 
-# ==========================
-# Blend Analysis
-# ==========================
+# عرض البيانات
+
+st.header("📋 البيانات")
+
+st.dataframe(df, use_container_width=True)
+
+# تحليل الخلطات
 
 st.header("🧪 تحليل الخلطات")
 
@@ -151,103 +100,143 @@ blend_summary = (
         "Neps": "mean",
         "Ner%": "mean"
     })
+    .round(2)
     .reset_index()
 )
-
-blend_summary = blend_summary.round(2)
 
 st.dataframe(
     blend_summary,
     use_container_width=True
 )
 
-# ==========================
-# Charts
-# ==========================
+# رسم بياني CV
 
-st.header("📈 الرسوم البيانية")
+st.header("📈 الانتظامية حسب الخلطات")
 
-col1, col2 = st.columns(2)
+cv_chart = df.groupby("Blend")["CV"].mean()
 
-with col1:
+st.bar_chart(cv_chart)
 
-    st.subheader("CV حسب الخلطة")
+# رسم بياني Neps
 
-    cv_chart = (
-        df.groupby("Blend")["CV"]
-        .mean()
-    )
+st.header("📈 النبس حسب الخلطات")
 
-    st.bar_chart(cv_chart)
+neps_chart = df.groupby("Blend")["Neps"].mean()
 
-with col2:
+st.bar_chart(neps_chart)
 
-    st.subheader("Neps حسب الخلطة")
-
-    neps_chart = (
-        df.groupby("Blend")["Neps"]
-        .mean()
-    )
-
-    st.bar_chart(neps_chart)
-
-# ==========================
-# Machine Analysis
-# ==========================
+# تحليل الماكينات
 
 st.header("⚙️ أداء الماكينات")
 
 machine_summary = (
     df.groupby("M.C")
     .agg({
-        "Count": "mean",
-        "CV": "mean",
-        "Neps": "mean",
-        "Ner%": "mean"
+        "Count":"mean",
+        "CV":"mean",
+        "Neps":"mean",
+        "Ner%":"mean"
     })
+    .round(2)
     .reset_index()
 )
-
-machine_summary = machine_summary.round(2)
 
 st.dataframe(
     machine_summary,
     use_container_width=True
 )
 
-st.subheader("مقارنة الماكينات")
+# أفضل وأسوأ ماكينة
 
-machine_chart = (
-    df.groupby("M.C")
-    .agg({
-        "CV": "mean",
-        "Neps": "mean",
-        "Ner%": "mean"
-    })
+best_machine = machine_summary.loc[
+    machine_summary["Ner%"].idxmax()
+]
+
+worst_machine = machine_summary.loc[
+    machine_summary["Ner%"].idxmin()
+]
+
+x1, x2 = st.columns(2)
+
+x1.success(
+    f"أفضل ماكينة : {best_machine['M.C']} | {best_machine['Ner%']:.1f}%"
 )
 
-st.bar_chart(machine_chart)
-
-# ==========================
-# Best & Worst Machine
-# ==========================
-
-st.header("🏆 تقييم الماكينات")
-
-machine_eff = (
-    df.groupby("M.C")["Ner%"]
-    .mean()
+x2.error(
+    f"أقل ماكينة : {worst_machine['M.C']} | {worst_machine['Ner%']:.1f}%"
 )
 
-best_machine = machine_eff.idxmax()
-worst_machine = machine_eff.idxmin()
+# الرؤية العامة
 
-c1, c2 = st.columns(2)
+st.header("📌 الرؤية العامة")
 
-with c1:
+avg_cv = df["CV"].mean()
+avg_neps = df["Neps"].mean()
+avg_eff = df["Ner%"].mean()
+
+quality_score = 100
+
+if avg_cv > 4:
+    quality_score -= 30
+
+if avg_neps > 120:
+    quality_score -= 30
+
+if avg_eff < 75:
+    quality_score -= 40
+
+st.metric(
+    "Quality Score",
+    f"{quality_score}%"
+)
+
+st.progress(quality_score / 100)
+
+if quality_score >= 85:
 
     st.success(
-        f"أفضل ماكينة : {best_machine} | {machine_eff.max():.1f}%"
+        "✅ جودة مرحلة الكارد ممتازة"
     )
 
-with
+elif quality_score >= 70:
+
+    st.warning(
+        "⚠️ الجودة جيدة وتحتاج متابعة"
+    )
+
+else:
+
+    st.error(
+        "❌ الجودة تحتاج تحسين"
+    )
+
+# تفاصيل ماكينة
+
+st.header("🔍 تفاصيل الماكينات")
+
+selected_machine = st.selectbox(
+    "اختر ماكينة",
+    sorted(df["M.C"].unique())
+)
+
+machine_data = df[
+    df["M.C"] == selected_machine
+]
+
+st.dataframe(
+    machine_data,
+    use_container_width=True
+)
+
+# تحميل التقرير
+
+csv = machine_data.to_csv(
+    index=False
+).encode("utf-8-sig")
+
+st.download_button(
+    "📥 تحميل التقرير",
+    csv,
+    "Carding_Report.csv",
+    "text/csv"
+)

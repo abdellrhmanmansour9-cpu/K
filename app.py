@@ -3,9 +3,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# =====================================================
+# ==================================================
 # PAGE CONFIG
-# =====================================================
+# ==================================================
 
 st.set_page_config(
     page_title="Carding Quality Dashboard",
@@ -13,11 +13,11 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧵 CARDING QUALITY DASHBOARD")
+st.title("🧵 Carding Quality Dashboard")
 
-# =====================================================
-# FILE UPLOAD
-# =====================================================
+# ==================================================
+# UPLOAD FILE
+# ==================================================
 
 uploaded_file = st.file_uploader(
     "Upload Excel Workbook",
@@ -25,11 +25,12 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is None:
+    st.info("Upload your Carding Workbook")
     st.stop()
 
-# =====================================================
+# ==================================================
 # READ DATA
-# =====================================================
+# ==================================================
 
 try:
 
@@ -57,9 +58,9 @@ except Exception as e:
     st.error(str(e))
     st.stop()
 
-# =====================================================
+# ==================================================
 # CLEAN COLUMN NAMES
-# =====================================================
+# ==================================================
 
 df.columns = df.columns.str.strip()
 
@@ -84,43 +85,23 @@ if missing:
     st.write(df.columns.tolist())
     st.stop()
 
-# =====================================================
-# CONVERT DATA TYPES
-# =====================================================
+# ==================================================
+# NUMERIC CONVERSION
+# ==================================================
 
 df["Count"] = pd.to_numeric(df["Count"], errors="coerce")
 df["CV"] = pd.to_numeric(df["CV"], errors="coerce")
 df["Neps"] = pd.to_numeric(df["Neps"], errors="coerce")
 df["Ner%"] = pd.to_numeric(df["Ner%"], errors="coerce")
 
-# لو الكفاءة مخزنة 0.75
+# لو الكفاءة 0.75 تتحول 75%
+
 if df["Ner%"].max() <= 1:
     df["Ner%"] = df["Ner%"] * 100
 
-# =====================================================
-# QUALITY SCORE
-# =====================================================
-
-avg_cv = df["CV"].mean()
-avg_neps = df["Neps"].mean()
-avg_eff = df["Ner%"].mean()
-
-quality_score = 100
-
-if avg_cv > 4:
-    quality_score -= 30
-
-if avg_neps > 120:
-    quality_score -= 30
-
-if avg_eff < 75:
-    quality_score -= 40
-
-quality_score = max(0, quality_score)
-
-# =====================================================
+# ==================================================
 # KPI
-# =====================================================
+# ==================================================
 
 st.header("📊 KPI")
 
@@ -150,9 +131,26 @@ with k4:
         f"{df['Ner%'].mean():.1f}%"
     )
 
-# =====================================================
-# QUALITY SCORE GAUGE
-# =====================================================
+# ==================================================
+# QUALITY SCORE
+# ==================================================
+
+avg_cv = df["CV"].mean()
+avg_neps = df["Neps"].mean()
+avg_eff = df["Ner%"].mean()
+
+quality_score = 100
+
+if avg_cv > 4:
+    quality_score -= 30
+
+if avg_neps > 120:
+    quality_score -= 30
+
+if avg_eff < 75:
+    quality_score -= 40
+
+quality_score = max(0, quality_score)
 
 st.header("🎯 Quality Score")
 
@@ -177,9 +175,9 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# =====================================================
+# ==================================================
 # MACHINE SUMMARY
-# =====================================================
+# ==================================================
 
 machine_summary = (
     df.groupby("M.C")
@@ -193,52 +191,77 @@ machine_summary = (
     .reset_index()
 )
 
-# =====================================================
-# TOP / BOTTOM MACHINES
-# =====================================================
+ranking = machine_summary.sort_values(
+    by="Ner%",
+    ascending=False
+).reset_index(drop=True)
 
-st.header("🏆 Machine Ranking")
+ranking.index += 1
 
-c1, c2 = st.columns(2)
+# ==================================================
+# MACHINE RANKING
+# ==================================================
 
-with c1:
+st.header("🏅 Machine Ranking")
 
-    st.subheader("Top Machines")
+st.dataframe(
+    ranking,
+    use_container_width=True
+)
 
-    top5 = machine_summary.sort_values(
-        "Ner%",
-        ascending=False
-    ).head(5)
+# ==================================================
+# BEST & WORST MACHINE
+# ==================================================
 
-    st.dataframe(
-        top5,
-        use_container_width=True
-    )
-
-with c2:
-
-    st.subheader("Worst Machines")
-
-    bottom5 = machine_summary.sort_values(
-        "Ner%",
-        ascending=True
-    ).head(5)
-
-    st.dataframe(
-        bottom5,
-        use_container_width=True
-    )
-
-# =====================================================
-# CHART ROW 1
-# =====================================================
+best_machine = ranking.iloc[0]
+worst_machine = ranking.iloc[-1]
 
 col1, col2 = st.columns(2)
 
 with col1:
 
-    fig_eff = px.bar(
-        machine_summary,
+    st.success(
+        f"""
+🏆 أفضل ماكينة
+
+رقم الماكينة : {best_machine['M.C']}
+
+الكفاءة : {best_machine['Ner%']:.1f}%
+
+CV : {best_machine['CV']:.2f}
+
+Neps : {best_machine['Neps']:.0f}
+"""
+    )
+
+with col2:
+
+    st.error(
+        f"""
+🔻 أسوأ ماكينة
+
+رقم الماكينة : {worst_machine['M.C']}
+
+الكفاءة : {worst_machine['Ner%']:.1f}%
+
+CV : {worst_machine['CV']:.2f}
+
+Neps : {worst_machine['Neps']:.0f}
+"""
+    )
+
+# ==================================================
+# CHARTS
+# ==================================================
+
+st.header("📈 Charts")
+
+c1, c2 = st.columns(2)
+
+with c1:
+
+    fig1 = px.bar(
+        ranking,
         x="M.C",
         y="Ner%",
         color="Ner%",
@@ -247,14 +270,14 @@ with col1:
     )
 
     st.plotly_chart(
-        fig_eff,
+        fig1,
         use_container_width=True
     )
 
-with col2:
+with c2:
 
-    fig_cv = px.bar(
-        machine_summary,
+    fig2 = px.bar(
+        ranking,
         x="M.C",
         y="CV",
         color="CV",
@@ -263,20 +286,16 @@ with col2:
     )
 
     st.plotly_chart(
-        fig_cv,
+        fig2,
         use_container_width=True
     )
 
-# =====================================================
-# CHART ROW 2
-# =====================================================
+c3, c4 = st.columns(2)
 
-col3, col4 = st.columns(2)
+with c3:
 
-with col3:
-
-    fig_neps = px.bar(
-        machine_summary,
+    fig3 = px.bar(
+        ranking,
         x="M.C",
         y="Neps",
         color="Neps",
@@ -285,11 +304,11 @@ with col3:
     )
 
     st.plotly_chart(
-        fig_neps,
+        fig3,
         use_container_width=True
     )
 
-with col4:
+with c4:
 
     blend_summary = (
         df.groupby("Blend")
@@ -302,21 +321,22 @@ with col4:
         .reset_index()
     )
 
-    fig_blend = px.pie(
+    fig4 = px.bar(
         blend_summary,
-        names="Blend",
-        values="Ner%",
-        title="Blend Distribution"
+        x="Blend",
+        y="Ner%",
+        color="Blend",
+        title="Blend Efficiency"
     )
 
     st.plotly_chart(
-        fig_blend,
+        fig4,
         use_container_width=True
     )
 
-# =====================================================
-# SCATTER
-# =====================================================
+# ==================================================
+# COUNT VS CV
+# ==================================================
 
 st.header("📈 Count vs CV")
 
@@ -326,8 +346,7 @@ fig_scatter = px.scatter(
     y="CV",
     color="Blend",
     size="Neps",
-    hover_data=["Lot", "M.C"],
-    title="Count vs CV"
+    hover_data=["Lot", "M.C"]
 )
 
 st.plotly_chart(
@@ -335,13 +354,13 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# =====================================================
+# ==================================================
 # PARETO
-# =====================================================
+# ==================================================
 
-st.header("📊 Pareto Neps")
+st.header("📊 Pareto Neps Analysis")
 
-pareto = machine_summary.sort_values(
+pareto = ranking.sort_values(
     "Neps",
     ascending=False
 )
@@ -350,8 +369,7 @@ fig_pareto = px.bar(
     pareto,
     x="M.C",
     y="Neps",
-    color="Neps",
-    title="Pareto Analysis"
+    color="Neps"
 )
 
 st.plotly_chart(
@@ -359,71 +377,33 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# =====================================================
-# SHEET ANALYSIS
-# =====================================================
-
-if "SHEET" in df.columns:
-
-    st.header("📑 Workbook Sheets")
-
-    sheet_summary = (
-        df.groupby("SHEET")
-        .agg({
-            "CV": "mean",
-            "Neps": "mean",
-            "Ner%": "mean"
-        })
-        .round(2)
-        .reset_index()
-    )
-
-    st.dataframe(
-        sheet_summary,
-        use_container_width=True
-    )
-
-# =====================================================
+# ==================================================
 # EXECUTIVE SUMMARY
-# =====================================================
+# ==================================================
 
 st.header("📌 Executive Summary")
 
-best_machine = machine_summary.loc[
-    machine_summary["Ner%"].idxmax()
-]
+if quality_score >= 85:
 
-worst_machine = machine_summary.loc[
-    machine_summary["Ner%"].idxmin()
-]
+    st.success(
+        "✅ جودة مرحلة الكارد ممتازة"
+    )
 
-st.success(
-    f"""
-أفضل ماكينة: {best_machine['M.C']}
-|
-الكفاءة: {best_machine['Ner%']:.1f}%
-|
-CV: {best_machine['CV']:.2f}
-|
-Neps: {best_machine['Neps']:.0f}
-"""
-)
+elif quality_score >= 70:
 
-st.error(
-    f"""
-أسوأ ماكينة: {worst_machine['M.C']}
-|
-الكفاءة: {worst_machine['Ner%']:.1f}%
-|
-CV: {worst_machine['CV']:.2f}
-|
-Neps: {worst_machine['Neps']:.0f}
-"""
-)
+    st.warning(
+        "⚠️ جودة مرحلة الكارد جيدة وتحتاج متابعة"
+    )
 
-# =====================================================
-# DATA TABLE
-# =====================================================
+else:
+
+    st.error(
+        "❌ توجد مشكلات تحتاج مراجعة"
+    )
+
+# ==================================================
+# DATA
+# ==================================================
 
 st.header("📋 Data")
 
@@ -432,11 +412,13 @@ st.dataframe(
     use_container_width=True
 )
 
-# =====================================================
+# ==================================================
 # DOWNLOAD
-# =====================================================
+# ==================================================
 
-csv = df.to_csv(index=False).encode("utf-8-sig")
+csv = df.to_csv(
+    index=False
+).encode("utf-8-sig")
 
 st.download_button(
     "📥 Download Report",

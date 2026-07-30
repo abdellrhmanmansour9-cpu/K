@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.ensemble import IsolationForest
 from io import BytesIO
 
 st.set_page_config(
@@ -8,308 +11,404 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧵 Yarn Quality Intelligence System")
+st.title("🧵 Yarn Quality Intelligence Dashboard")
 
-uploaded_files = st.file_uploader(
+# ------------------------------------------------
+# LOAD
+# ------------------------------------------------
+
+files = st.file_uploader(
     "Upload Excel Files",
     type=["xlsx"],
     accept_multiple_files=True
 )
 
-# ==========================================
-# COLUMN STANDARDIZATION
-# ==========================================
+if not files:
+    st.stop()
 
-COLUMN_MAP = {
+# ------------------------------------------------
+# READ FILES
+# ------------------------------------------------
 
-    "C.V m": "CVm",
-    "CV": "CVm",
-    "BLEND": "Blend",
-    "Product": "Product",
-    "PRODUCT": "Product"
+frames = []
 
-}
+for file in files:
 
-# ==========================================
-# LOAD FILES
-# ==========================================
-
-def load_data(files):
-
-    all_frames = []
-
-    for file in files:
-
-        sheets = pd.read_excel(
-            file,
-            sheet_name=None
-        )
-
-        for sheet_name, df in sheets.items():
-
-            df = df.rename(
-                columns=COLUMN_MAP
-            )
-
-            df["Stage"] = file.name
-            df["Sheet"] = sheet_name
-
-            all_frames.append(df)
-
-    return pd.concat(
-        all_frames,
-        ignore_index=True
+    sheets = pd.read_excel(
+        file,
+        sheet_name=None
     )
 
-# ==========================================
-# SCORE
-# ==========================================
+    for sheet_name, df in sheets.items():
 
-def calculate_score(df):
+        df.columns = [str(c).strip() for c in df.columns]
 
-    required = [
-        "CVm",
-        "IPI",
-        "NEPS",
-        "RKM",
-        "ELG",
-        "Bforce"
-    ]
+        rename_dict = {
+            "C.V m": "CVm",
+            "BLEND": "Blend",
+            "PRODUCT": "Product"
+        }
 
-    for col in required:
+        df = df.rename(columns=rename_dict)
 
-        if col not in df.columns:
+        df["Source_File"] = file.name
+        df["Sheet"] = sheet_name
 
-            df[col] = 0
+        frames.append(df)
 
-    raw_score = (
+df = pd.concat(frames, ignore_index=True)
 
-        (df["RKM"] * 3)
+# ------------------------------------------------
+# REQUIRED COLUMNS
+# ------------------------------------------------
 
-        + (df["ELG"] * 2)
+required = [
+    "CVm",
+    "IPI",
+    "NEPS",
+    "RKM",
+    "ELG",
+    "Bforce"
+]
 
-        + (df["Bforce"] / 20)
+for col in required:
+    if col not in df.columns:
+        df[col] = 0
 
-        - (df["CVm"] * 2)
+# ------------------------------------------------
+# QUALITY SCORE
+# ------------------------------------------------
 
-        - (df["IPI"] * 0.05)
+raw_score = (
 
-        - (df["NEPS"] * 0.02)
+    (df["RKM"] * 3)
+    + (df["ELG"] * 2)
+    + (df["Bforce"] / 20)
 
-    )
+    - (df["CVm"] * 2)
+    - (df["IPI"] * 0.05)
+    - (df["NEPS"] * 0.02)
 
-    raw_score = raw_score.fillna(0)
+)
 
-    score = (
+raw_score = raw_score.fillna(0)
 
-        (raw_score - raw_score.min())
+df["Quality_Score"] = (
+    (raw_score - raw_score.min())
+    /
+    (raw_score.max() - raw_score.min() + 0.001)
+) * 100
 
-        /
 
-        (raw_score.max() - raw_score.min() + 0.0001)
+def grade(x):
 
-    ) * 100
+    if x >= 90:
+        return "A+"
 
-    df["Quality_Score"] = score
+    if x >= 80:
+        return "A"
 
-    def grade(x):
+    if x >= 70:
+        return "B"
 
-        if x >= 90:
-            return "A+"
+    if x >= 60:
+        return "C"
 
-        elif x >= 80:
-            return "A"
+    return "D"
 
-        elif x >= 70:
-            return "B"
 
-        elif x >= 60:
-            return "C"
+df["Grade"] = df["Quality_Score"].apply(grade)
 
-        else:
-            return "D"
-
-    df["Quality_Grade"] = score.apply(grade)
-
-    return df
-
-# ==========================================
+# ------------------------------------------------
 # ROOT CAUSE
-# ==========================================
+# ------------------------------------------------
 
 def root_cause(row):
 
-    text = []
+    causes = []
 
     if row.get("NEPS", 0) > 150:
-        text.append("Carding Issue")
+        causes.append("Carding Issue")
 
     if row.get("THICK", 0) > 150:
-        text.append("Drafting Issue")
+        causes.append("Drafting Issue")
+
+    if row.get("THIN", 0) > 10:
+        causes.append("Material Variation")
 
     if row.get("CVm", 0) > 14:
-        text.append("Mass Variation")
+        causes.append("Mass Variation")
 
     if row.get("RKM", 100) < 15:
-        text.append("Low Strength")
+        causes.append("Low Strength")
 
-    if len(text) == 0:
-        text.append("Stable Process")
+    if not causes:
+        causes.append("Stable")
 
-    return " | ".join(text)
+    return " | ".join(causes)
 
-# ==========================================
-# RUN
-# ==========================================
 
-if uploaded_files:
+df["Root_Cause"] = df.apply(
+    root_cause,
+    axis=1
+)
 
-    df = load_data(uploaded_files)
+# ------------------------------------------------
+# ANOMALY DETECTION
+# ------------------------------------------------
 
-    df = calculate_score(df)
+features = [
+    "CVm",
+    "IPI",
+    "NEPS",
+    "RKM",
+    "ELG",
+    "Bforce"
+]
 
-    df["Root_Cause"] = df.apply(
-        root_cause,
-        axis=1
-    )
+model = IsolationForest(
+    contamination=0.05,
+    random_state=42
+)
 
-    st.success(
-        f"Records Loaded : {len(df):,}"
-    )
+df["Anomaly"] = model.fit_predict(
+    df[features].fillna(0)
+)
 
-    st.subheader("Executive Summary")
+df["Anomaly"] = df["Anomaly"].map(
+    {-1: "Risk", 1: "Normal"}
+)
 
-    c1, c2, c3 = st.columns(3)
+# ------------------------------------------------
+# KPI
+# ------------------------------------------------
 
-    c1.metric(
-        "Avg Score",
-        round(
-            df["Quality_Score"].mean(),
-            2
+st.header("📊 Executive Dashboard")
+
+c1, c2, c3, c4 = st.columns(4)
+
+c1.metric(
+    "Quality Score",
+    round(df["Quality_Score"].mean(), 2)
+)
+
+c2.metric(
+    "Avg IPI",
+    round(df["IPI"].mean(), 2)
+)
+
+c3.metric(
+    "Avg CVm",
+    round(df["CVm"].mean(), 2)
+)
+
+c4.metric(
+    "Avg RKM",
+    round(df["RKM"].mean(), 2)
+)
+
+# ------------------------------------------------
+# PRODUCT ANALYSIS
+# ------------------------------------------------
+
+if "Product" in df.columns:
+
+    st.header("🏆 Product Ranking")
+
+    product_summary = (
+
+        df.groupby("Product")
+
+        .agg({
+            "Quality_Score": "mean",
+            "IPI": "mean",
+            "CVm": "mean",
+            "RKM": "mean"
+        })
+
+        .round(2)
+
+        .sort_values(
+            "Quality_Score",
+            ascending=False
         )
-    )
-
-    c2.metric(
-        "Avg IPI",
-        round(
-            df["IPI"].mean(),
-            2
-        )
-    )
-
-    c3.metric(
-        "Avg RKM",
-        round(
-            df["RKM"].mean(),
-            2
-        )
-    )
-
-    if "Product" in df.columns:
-
-        product_summary = (
-
-            df.groupby("Product")
-
-            .agg({
-
-                "Quality_Score":"mean",
-                "CVm":"mean",
-                "IPI":"mean",
-                "RKM":"mean"
-
-            })
-
-            .round(2)
-
-            .sort_values(
-                "Quality_Score",
-                ascending=False
-            )
-
-        )
-
-        st.subheader(
-            "Product Ranking"
-        )
-
-        st.dataframe(
-            product_summary
-        )
-
-    if "Blend" in df.columns:
-
-        blend_summary = (
-
-            df.groupby("Blend")
-
-            .agg({
-
-                "Quality_Score":"mean",
-                "CVm":"mean",
-                "IPI":"mean",
-                "RKM":"mean"
-
-            })
-
-            .round(2)
-
-            .sort_values(
-                "Quality_Score",
-                ascending=False
-            )
-
-        )
-
-        st.subheader(
-            "Blend Ranking"
-        )
-
-        st.dataframe(
-            blend_summary
-        )
-
-    output = BytesIO()
-
-    with pd.ExcelWriter(
-        output,
-        engine="openpyxl"
-    ) as writer:
-
-        df.to_excel(
-            writer,
-            sheet_name="Raw_Data",
-            index=False
-        )
-
-        if "Product" in df.columns:
-
-            product_summary.to_excel(
-                writer,
-                sheet_name="Product_Summary"
-            )
-
-        if "Blend" in df.columns:
-
-            blend_summary.to_excel(
-                writer,
-                sheet_name="Blend_Summary"
-            )
-
-    st.download_button(
-
-        label="📥 Download Report",
-
-        data=output.getvalue(),
-
-        file_name="Quality_Report.xlsx",
-
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     )
 
-else:
-
-    st.info(
-        "Upload your excel file/files to start analysis"
+    fig = px.bar(
+        product_summary.reset_index(),
+        x="Quality_Score",
+        y="Product",
+        color="Quality_Score",
+        orientation="h",
+        height=700
     )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+# ------------------------------------------------
+# BLEND ANALYSIS
+# ------------------------------------------------
+
+if "Blend" in df.columns:
+
+    st.header("🧪 Blend Analysis")
+
+    blend_summary = (
+
+        df.groupby("Blend")
+
+        .agg({
+            "Quality_Score": "mean"
+        })
+
+        .reset_index()
+    )
+
+    fig = px.treemap(
+        blend_summary,
+        path=["Blend"],
+        values="Quality_Score",
+        color="Quality_Score"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+# ------------------------------------------------
+# LOT TREND
+# ------------------------------------------------
+
+if "LOT" in df.columns:
+
+    st.header("📈 Quality Trend By Lot")
+
+    lot_summary = (
+
+        df.groupby("LOT")
+
+        .agg({
+            "Quality_Score": "mean"
+        })
+
+        .reset_index()
+    )
+
+    fig = px.line(
+        lot_summary,
+        x="LOT",
+        y="Quality_Score",
+        markers=True
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+# ------------------------------------------------
+# HEATMAP
+# ------------------------------------------------
+
+if "LOT" in df.columns and "Product" in df.columns:
+
+    st.header("🔥 Product vs LOT Heatmap")
+
+    heat = pd.pivot_table(
+        df,
+        values="Quality_Score",
+        index="Product",
+        columns="LOT",
+        aggfunc="mean"
+    )
+
+    fig = px.imshow(
+        heat,
+        aspect="auto",
+        color_continuous_scale="RdYlGn"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+# ------------------------------------------------
+# PARETO
+# ------------------------------------------------
+
+st.header("⚠ Root Cause Pareto")
+
+root = pd.DataFrame()
+
+root["Cause"] = (
+
+    df["Root_Cause"]
+
+    .str.split("|")
+
+    .explode()
+
+    .str.strip()
+
+)
+
+root = (
+
+    root["Cause"]
+
+    .value_counts()
+
+    .reset_index()
+
+)
+
+root.columns = [
+    "Cause",
+    "Count"
+]
+
+fig = px.bar(
+    root,
+    x="Cause",
+    y="Count",
+    color="Count"
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
+)
+
+# ------------------------------------------------
+# ANOMALY
+# ------------------------------------------------
+
+st.header("🚨 Critical Lots")
+
+risk = df[
+    df["Anomaly"] == "Risk"
+]
+
+st.dataframe(
+    risk.head(100)
+)
+
+# ------------------------------------------------
+# RADAR CHART
+# ------------------------------------------------
+
+if "Product" in df.columns:
+
+    st.header("🎯 Product Radar Chart")
+
+    product = st.selectbox(
+        "Select Product",
+        sorted(
+            df["Product"]
+            .dropna

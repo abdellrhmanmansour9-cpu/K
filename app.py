@@ -1,67 +1,88 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
-from pathlib import Path
-from sklearn.ensemble import IsolationForest
+from io import BytesIO
 
-# =====================================================
-# SETTINGS
-# =====================================================
+st.set_page_config(
+    page_title="Yarn Quality Intelligence",
+    layout="wide"
+)
 
-DATA_FOLDER = "data"
-OUTPUT_FILE = "Quality_Report.xlsx"
+st.title("🧵 Yarn Quality Intelligence System")
 
-# =====================================================
-# LOAD DATA
-# =====================================================
+uploaded_files = st.file_uploader(
+    "Upload Excel Files",
+    type=["xlsx"],
+    accept_multiple_files=True
+)
 
-def load_data(folder):
+# ==========================================
+# COLUMN STANDARDIZATION
+# ==========================================
 
-    dataframes = []
+COLUMN_MAP = {
 
-    files = list(Path(folder).glob("*.xlsx"))
+    "C.V m": "CVm",
+    "CV": "CVm",
+    "BLEND": "Blend",
+    "Product": "Product",
+    "PRODUCT": "Product"
 
-    if not files:
-        raise Exception("No Excel files found")
+}
+
+# ==========================================
+# LOAD FILES
+# ==========================================
+
+def load_data(files):
+
+    all_frames = []
 
     for file in files:
 
-        print(f"Loading : {file.name}")
+        sheets = pd.read_excel(
+            file,
+            sheet_name=None
+        )
 
-        try:
+        for sheet_name, df in sheets.items():
 
-            sheets = pd.read_excel(
-                file,
-                sheet_name=None
+            df = df.rename(
+                columns=COLUMN_MAP
             )
 
-            for sheet_name, df in sheets.items():
+            df["Stage"] = file.name
+            df["Sheet"] = sheet_name
 
-                df["Stage"] = file.stem
-                df["Sheet"] = sheet_name
-
-                dataframes.append(df)
-
-        except Exception:
-
-            df = pd.read_excel(file)
-
-            df["Stage"] = file.stem
-            df["Sheet"] = "Data"
-
-            dataframes.append(df)
+            all_frames.append(df)
 
     return pd.concat(
-        dataframes,
+        all_frames,
         ignore_index=True
     )
 
-# =====================================================
-# QUALITY SCORE
-# =====================================================
+# ==========================================
+# SCORE
+# ==========================================
 
-def add_quality_score(df):
+def calculate_score(df):
 
-    score = (
+    required = [
+        "CVm",
+        "IPI",
+        "NEPS",
+        "RKM",
+        "ELG",
+        "Bforce"
+    ]
+
+    for col in required:
+
+        if col not in df.columns:
+
+            df[col] = 0
+
+    raw_score = (
 
         (df["RKM"] * 3)
 
@@ -77,397 +98,218 @@ def add_quality_score(df):
 
     )
 
-    score = score.fillna(score.mean())
+    raw_score = raw_score.fillna(0)
 
-    normalized = (
+    score = (
 
-        (score - score.min())
+        (raw_score - raw_score.min())
 
-        / (score.max() - score.min())
+        /
+
+        (raw_score.max() - raw_score.min() + 0.0001)
 
     ) * 100
 
-    df["Quality_Score"] = normalized
+    df["Quality_Score"] = score
 
-    conditions = [
+    def grade(x):
 
-        normalized >= 90,
-        normalized >= 80,
-        normalized >= 70,
-        normalized >= 60
+        if x >= 90:
+            return "A+"
 
-    ]
+        elif x >= 80:
+            return "A"
 
-    values = [
+        elif x >= 70:
+            return "B"
 
-        "A+",
-        "A",
-        "B",
-        "C"
+        elif x >= 60:
+            return "C"
 
-    ]
+        else:
+            return "D"
 
-    df["Quality_Grade"] = np.select(
-        conditions,
-        values,
-        default="D"
-    )
+    df["Quality_Grade"] = score.apply(grade)
 
     return df
 
-# =====================================================
+# ==========================================
 # ROOT CAUSE
-# =====================================================
+# ==========================================
 
 def root_cause(row):
 
-    causes = []
+    text = []
 
-    if row.get("NEPS",0) > 150:
-        causes.append("Carding Issue")
+    if row.get("NEPS", 0) > 150:
+        text.append("Carding Issue")
 
-    if row.get("THICK",0) > 150:
-        causes.append("Drafting Issue")
+    if row.get("THICK", 0) > 150:
+        text.append("Drafting Issue")
 
-    if row.get("THIN",0) > 10:
-        causes.append("Material Variation")
+    if row.get("CVm", 0) > 14:
+        text.append("Mass Variation")
 
-    if row.get("CVm",0) > 14:
-        causes.append("Mass Variation")
+    if row.get("RKM", 100) < 15:
+        text.append("Low Strength")
 
-    if row.get("RKM",100) < 15:
-        causes.append("Low Strength")
+    if len(text) == 0:
+        text.append("Stable Process")
 
-    if len(causes) == 0:
-        causes.append("Stable Process")
+    return " | ".join(text)
 
-    return " | ".join(causes)
+# ==========================================
+# RUN
+# ==========================================
 
-# =====================================================
-# ANOMALY DETECTION
-# =====================================================
+if uploaded_files:
 
-def detect_anomalies(df):
+    df = load_data(uploaded_files)
 
-    features = [
+    df = calculate_score(df)
 
-        "CVm",
-        "IPI",
-        "RKM",
-        "ELG",
-        "Bforce"
-
-    ]
-
-    existing = [
-        c for c in features
-        if c in df.columns
-    ]
-
-    model = IsolationForest(
-        contamination=0.05,
-        random_state=42
+    df["Root_Cause"] = df.apply(
+        root_cause,
+        axis=1
     )
 
-    temp = df[existing].fillna(0)
+    st.success(
+        f"Records Loaded : {len(df):,}"
+    )
 
-    df["Anomaly"] = model.fit_predict(temp)
+    st.subheader("Executive Summary")
 
-    df["Anomaly"] = df["Anomaly"].replace({
-        -1:"Yes",
-         1:"No"
-    })
+    c1, c2, c3 = st.columns(3)
 
-    return df
-
-# =====================================================
-# SUMMARIES
-# =====================================================
-
-def stage_summary(df):
-
-    return (
-
-        df.groupby("Stage")
-
-        .agg({
-
-            "CVm":"mean",
-            "IPI":"mean",
-            "RKM":"mean",
-            "ELG":"mean",
-            "Bforce":"mean",
-            "Quality_Score":"mean"
-
-        })
-
-        .round(2)
-
-        .sort_values(
-            "Quality_Score",
-            ascending=False
+    c1.metric(
+        "Avg Score",
+        round(
+            df["Quality_Score"].mean(),
+            2
         )
     )
 
-def product_summary(df):
-
-    if "Product" not in df.columns:
-        return pd.DataFrame()
-
-    return (
-
-        df.groupby("Product")
-
-        .agg({
-
-            "CVm":"mean",
-            "IPI":"mean",
-            "RKM":"mean",
-            "ELG":"mean",
-            "Bforce":"mean",
-            "Quality_Score":"mean"
-
-        })
-
-        .round(2)
-
-        .sort_values(
-            "Quality_Score",
-            ascending=False
+    c2.metric(
+        "Avg IPI",
+        round(
+            df["IPI"].mean(),
+            2
         )
     )
 
-def blend_summary(df):
-
-    blend_col = None
-
-    for c in ["Blend","BLEND"]:
-        if c in df.columns:
-            blend_col = c
-
-    if blend_col is None:
-        return pd.DataFrame()
-
-    return (
-
-        df.groupby(blend_col)
-
-        .agg({
-
-            "CVm":"mean",
-            "IPI":"mean",
-            "RKM":"mean",
-            "ELG":"mean",
-            "Bforce":"mean",
-            "Quality_Score":"mean"
-
-        })
-
-        .round(2)
-
-        .sort_values(
-            "Quality_Score",
-            ascending=False
+    c3.metric(
+        "Avg RKM",
+        round(
+            df["RKM"].mean(),
+            2
         )
     )
-
-def lot_summary(df):
-
-    if "LOT" not in df.columns:
-        return pd.DataFrame()
-
-    return (
-
-        df.groupby("LOT")
-
-        .agg({
-
-            "CVm":"mean",
-            "IPI":"mean",
-            "RKM":"mean",
-            "ELG":"mean",
-            "Bforce":"mean",
-            "Quality_Score":"mean"
-
-        })
-
-        .round(2)
-
-    )
-
-# =====================================================
-# EXECUTIVE SUMMARY
-# =====================================================
-
-def executive_summary(df):
-
-    best_product = ""
 
     if "Product" in df.columns:
 
-        temp = (
+        product_summary = (
+
             df.groupby("Product")
-            ["Quality_Score"]
-            .mean()
+
+            .agg({
+
+                "Quality_Score":"mean",
+                "CVm":"mean",
+                "IPI":"mean",
+                "RKM":"mean"
+
+            })
+
+            .round(2)
+
+            .sort_values(
+                "Quality_Score",
+                ascending=False
+            )
+
         )
 
-        best_product = temp.idxmax()
+        st.subheader(
+            "Product Ranking"
+        )
 
-        worst_product = temp.idxmin()
+        st.dataframe(
+            product_summary
+        )
 
-    else:
+    if "Blend" in df.columns:
 
-        best_product = "NA"
-        worst_product = "NA"
+        blend_summary = (
 
-    summary = pd.DataFrame({
+            df.groupby("Blend")
 
-        "Metric":[
+            .agg({
 
-            "Total Records",
-            "Average Quality Score",
-            "Best Product",
-            "Worst Product",
-            "Average CVm",
-            "Average IPI",
-            "Average RKM"
+                "Quality_Score":"mean",
+                "CVm":"mean",
+                "IPI":"mean",
+                "RKM":"mean"
 
-        ],
+            })
 
-        "Value":[
+            .round(2)
 
-            len(df),
-            round(
-                df["Quality_Score"].mean(),
-                2
-            ),
-            best_product,
-            worst_product,
-            round(
-                df["CVm"].mean(),
-                2
-            ),
-            round(
-                df["IPI"].mean(),
-                2
-            ),
-            round(
-                df["RKM"].mean(),
-                2
+            .sort_values(
+                "Quality_Score",
+                ascending=False
             )
-        ]
-    })
 
-    return summary
+        )
 
-# =====================================================
-# EXPORT
-# =====================================================
+        st.subheader(
+            "Blend Ranking"
+        )
 
-def export_all(
+        st.dataframe(
+            blend_summary
+        )
 
-    summary,
-    stage,
-    product,
-    blend,
-    lot,
-    anomalies
-
-):
+    output = BytesIO()
 
     with pd.ExcelWriter(
-        OUTPUT_FILE,
-        engine="xlsxwriter"
+        output,
+        engine="openpyxl"
     ) as writer:
 
-        summary.to_excel(
+        df.to_excel(
             writer,
-            sheet_name="Executive",
+            sheet_name="Raw_Data",
             index=False
         )
 
-        stage.to_excel(
-            writer,
-            sheet_name="Stage_Summary"
-        )
+        if "Product" in df.columns:
 
-        product.to_excel(
-            writer,
-            sheet_name="Product_Summary"
-        )
+            product_summary.to_excel(
+                writer,
+                sheet_name="Product_Summary"
+            )
 
-        blend.to_excel(
-            writer,
-            sheet_name="Blend_Summary"
-        )
+        if "Blend" in df.columns:
 
-        lot.to_excel(
-            writer,
-            sheet_name="Lot_Summary"
-        )
+            blend_summary.to_excel(
+                writer,
+                sheet_name="Blend_Summary"
+            )
 
-        anomalies.to_excel(
-            writer,
-            sheet_name="Anomalies",
-            index=False
-        )
+    st.download_button(
 
-# =====================================================
-# MAIN
-# =====================================================
+        label="📥 Download Report",
 
-def main():
+        data=output.getvalue(),
 
-    df = load_data(DATA_FOLDER)
+        file_name="Quality_Report.xlsx",
 
-    df = add_quality_score(df)
-
-    df["Root_Cause"] = (
-        df.apply(
-            root_cause,
-            axis=1
-        )
-    )
-
-    df = detect_anomalies(df)
-
-    stage = stage_summary(df)
-
-    product = product_summary(df)
-
-    blend = blend_summary(df)
-
-    lot = lot_summary(df)
-
-    summary = executive_summary(df)
-
-    anomalies = (
-
-        df[df["Anomaly"] == "Yes"]
-
-        .sort_values(
-            "Quality_Score"
-        )
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     )
 
-    export_all(
+else:
 
-        summary,
-        stage,
-        product,
-        blend,
-        lot,
-        anomalies
-
+    st.info(
+        "Upload your excel file/files to start analysis"
     )
-
-    print("="*50)
-    print("QUALITY ANALYSIS COMPLETED")
-    print("="*50)
-    print(f"Records : {len(df)}")
-    print(f"Average Quality Score : {round(df['Quality_Score'].mean(),2)}")
-    print(f"Report Saved : {OUTPUT_FILE}")
-
-if __name__ == "__main__":
-    main()

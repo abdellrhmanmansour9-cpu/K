@@ -1,373 +1,267 @@
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-
-# ======================================
-# PAGE CONFIG
-# ======================================
-
-st.set_page_config(
-    page_title="Carding Dashboard",
-    page_icon="🧵",
-    layout="wide"
-)
-
-st.title("🧵 CARDING QUALITY DASHBOARD")
-
-# ======================================
-# UPLOAD FILE
-# ======================================
-
-uploaded_file = st.file_uploader(
-    "تحميل ملف الكارد",
-    type=["xlsx", "xls", "csv"]
-)
-
-if uploaded_file is None:
-    st.info("قم برفع ملف البيانات")
-    st.stop()
-
-# ======================================
-# READ FILE
-# ======================================
-
-if uploaded_file.name.endswith(".csv"):
-    df = pd.read_csv(uploaded_file)
-else:
-    df = pd.read_excel(uploaded_file)
-
-df.columns = df.columns.str.strip()
-
-# ======================================
-# REQUIRED COLUMNS
-# ======================================
-
-required = [
-    "M.C",
-    "Lot",
-    "Count",
-    "CV",
-    "Neps",
-    "Ner%",
-    "Blend"
-]
-
-missing = [c for c in required if c not in df.columns]
-
-if missing:
-
-    st.error(f"الأعمدة غير موجودة : {missing}")
-    st.write(df.columns.tolist())
-    st.stop()
-
-# ======================================
-# DATA TYPES
-# ======================================
-
-df["Count"] = pd.to_numeric(df["Count"], errors="coerce")
-df["CV"] = pd.to_numeric(df["CV"], errors="coerce")
-df["Neps"] = pd.to_numeric(df["Neps"], errors="coerce")
-
-# لو البيانات 0.77
-
-if df["Ner%"].max() <= 1:
-    df["Ner%"] = pd.to_numeric(df["Ner%"], errors="coerce") * 100
-else:
-    df["Ner%"] = pd.to_numeric(df["Ner%"], errors="coerce")
-
-# ======================================
+# =====================================
 # KPI
-# ======================================
+# =====================================
 
 st.header("📊 KPI")
 
 k1, k2, k3, k4 = st.columns(4)
 
 k1.metric(
-    "متوسط النمرة",
+    "Average Count",
     f"{df['Count'].mean():.2f}"
 )
 
 k2.metric(
-    "متوسط CV",
+    "Average CV",
     f"{df['CV'].mean():.2f}"
 )
 
 k3.metric(
-    "متوسط Neps",
+    "Average Neps",
     f"{df['Neps'].mean():.0f}"
 )
 
 k4.metric(
-    "متوسط الكفاءة",
+    "Average Efficiency",
     f"{df['Ner%'].mean():.1f}%"
 )
 
-# ======================================
+# =====================================
 # QUALITY SCORE
-# ======================================
-
-avg_cv = df["CV"].mean()
-avg_neps = df["Neps"].mean()
-avg_eff = df["Ner%"].mean()
-
-quality_score = 100
-
-if avg_cv > 4:
-    quality_score -= 30
-
-if avg_neps > 120:
-    quality_score -= 30
-
-if avg_eff < 75:
-    quality_score -= 40
+# =====================================
 
 st.header("🎯 Quality Score")
 
-fig = go.Figure(go.Indicator(
-    mode="gauge+number",
-    value=quality_score,
-    title={'text': "Quality Score"},
-    gauge={
-        'axis': {'range': [0,100]},
-        'bar': {'color': "darkblue"},
-        'steps': [
-            {'range':[0,50],'color':'red'},
-            {'range':[50,75],'color':'orange'},
-            {'range':[75,100],'color':'green'}
-        ]
-    }
-))
+fig_gauge = go.Figure(
+    go.Indicator(
+        mode="gauge+number",
+        value=quality_score,
+        title={"text":"Quality Score"},
+        gauge={
+            "axis":{"range":[0,100]},
+            "steps":[
+                {"range":[0,50],"color":"red"},
+                {"range":[50,75],"color":"orange"},
+                {"range":[75,100],"color":"green"}
+            ]
+        }
+    )
+)
 
 st.plotly_chart(
-    fig,
+    fig_gauge,
     use_container_width=True
 )
 
-# ======================================
-# TABS
-# ======================================
+# =====================================
+# MACHINE RANKING
+# =====================================
 
-tab1, tab2, tab3, tab4 = st.tabs(
-    [
-        "📈 Overview",
-        "🧪 Blend",
-        "⚙️ Machines",
-        "📋 Details"
-    ]
+machine_summary = (
+    df.groupby("M.C")
+    .agg({
+        "CV":"mean",
+        "Neps":"mean",
+        "Ner%":"mean"
+    })
+    .reset_index()
 )
 
-# ======================================
-# OVERVIEW
-# ======================================
+st.header("🏆 Ranking")
 
-with tab1:
+c1, c2 = st.columns(2)
 
-    st.subheader("CV حسب الخلطة")
+with c1:
 
-    cv_summary = (
-        df.groupby("Blend")["CV"]
-        .mean()
-        .reset_index()
-    )
+    st.subheader("أفضل الماكينات")
 
-    fig_cv = px.bar(
-        cv_summary,
-        x="Blend",
-        y="CV",
-        color="CV",
-        text_auto=".2f"
-    )
+    top5 = machine_summary.sort_values(
+        "Ner%",
+        ascending=False
+    ).head(5)
 
-    st.plotly_chart(
-        fig_cv,
-        use_container_width=True
-    )
+    st.dataframe(top5)
 
-    st.subheader("Neps حسب الخلطة")
+with c2:
 
-    neps_summary = (
-        df.groupby("Blend")["Neps"]
-        .mean()
-        .reset_index()
-    )
+    st.subheader("أسوأ الماكينات")
 
-    fig_neps = px.bar(
-        neps_summary,
-        x="Blend",
-        y="Neps",
-        color="Neps",
-        text_auto=".0f"
-    )
+    bottom5 = machine_summary.sort_values(
+        "Ner%",
+        ascending=True
+    ).head(5)
 
-    st.plotly_chart(
-        fig_neps,
-        use_container_width=True
-    )
+    st.dataframe(bottom5)
 
-# ======================================
-# BLEND
-# ======================================
+# =====================================
+# CHARTS ROW 1
+# =====================================
 
-with tab2:
+c1, c2 = st.columns(2)
 
-    blend_summary = (
-        df.groupby("Blend")
-        .agg({
-            "Count":"mean",
-            "CV":"mean",
-            "Neps":"mean",
-            "Ner%":"mean"
-        })
-        .round(2)
-        .reset_index()
-    )
+with c1:
 
-    st.dataframe(
-        blend_summary,
-        use_container_width=True
-    )
-
-    fig = px.pie(
-        df,
-        names="Blend",
-        title="توزيع الخلطات"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-# ======================================
-# MACHINES
-# ======================================
-
-with tab3:
-
-    machine_summary = (
-        df.groupby("M.C")
-        .agg({
-            "Count":"mean",
-            "CV":"mean",
-            "Neps":"mean",
-            "Ner%":"mean"
-        })
-        .round(2)
-        .reset_index()
-    )
-
-    st.dataframe(
-        machine_summary,
-        use_container_width=True
-    )
-
-    fig_machine = px.bar(
+    fig1 = px.bar(
         machine_summary,
         x="M.C",
         y="Ner%",
         color="Ner%",
-        text_auto=".1f",
-        title="كفاءة الماكينات"
+        title="Machine Efficiency"
     )
 
     st.plotly_chart(
-        fig_machine,
+        fig1,
         use_container_width=True
     )
 
-    best_machine = machine_summary.loc[
-        machine_summary["Ner%"].idxmax()
-    ]
+with c2:
 
-    worst_machine = machine_summary.loc[
-        machine_summary["Ner%"].idxmin()
-    ]
-
-    c1, c2 = st.columns(2)
-
-    with c1:
-        st.success(
-            f"أفضل ماكينة : {best_machine['M.C']} | {best_machine['Ner%']:.1f}%"
-        )
-
-    with c2:
-        st.error(
-            f"أقل ماكينة : {worst_machine['M.C']} | {worst_machine['Ner%']:.1f}%"
-        )
-
-# ======================================
-# DETAILS
-# ======================================
-
-with tab4:
-
-    st.subheader("العلاقة بين النمرة والانتظامية")
-
-    fig_scatter = px.scatter(
-        df,
-        x="Count",
+    fig2 = px.bar(
+        machine_summary,
+        x="M.C",
         y="CV",
-        color="Blend",
-        size="Neps",
-        hover_data=["Lot","M.C"]
+        color="CV",
+        title="CV By Machine"
     )
 
     st.plotly_chart(
-        fig_scatter,
+        fig2,
         use_container_width=True
     )
 
-    selected_machine = st.selectbox(
-        "اختر ماكينة",
-        sorted(df["M.C"].unique())
+# =====================================
+# CHARTS ROW 2
+# =====================================
+
+c1, c2 = st.columns(2)
+
+with c1:
+
+    fig3 = px.bar(
+        machine_summary,
+        x="M.C",
+        y="Neps",
+        color="Neps",
+        title="Neps By Machine"
     )
 
-    filtered = df[
-        df["M.C"] == selected_machine
-    ]
-
-    st.dataframe(
-        filtered,
+    st.plotly_chart(
+        fig3,
         use_container_width=True
     )
 
-# ======================================
-# EXECUTIVE VIEW
-# ======================================
+with c2:
 
-st.header("📌 الرؤية العامة")
-
-if quality_score >= 85:
-
-    st.success(
-        "✅ مرحلة الكارد مستقرة والجودة ممتازة"
+    blend_summary = (
+        df.groupby("Blend")
+        .agg({
+            "CV":"mean",
+            "Neps":"mean",
+            "Ner%":"mean"
+        })
+        .reset_index()
     )
 
-elif quality_score >= 70:
-
-    st.warning(
-        "⚠️ الأداء جيد ويحتاج متابعة"
+    fig4 = px.pie(
+        blend_summary,
+        names="Blend",
+        values="Ner%",
+        title="Blend Distribution"
     )
 
-else:
-
-    st.error(
-        "❌ توجد مشكلات تستدعي مراجعة الماكينات والخلطات"
+    st.plotly_chart(
+        fig4,
+        use_container_width=True
     )
 
-# ======================================
-# DOWNLOAD
-# ======================================
+# =====================================
+# SCATTER
+# =====================================
 
-csv = df.to_csv(
-    index=False
-).encode("utf-8-sig")
+st.header("📈 Count vs CV")
 
-st.download_button(
-    "📥 تحميل التقرير",
-    data=csv,
-    file_name="Carding_Report.csv",
-    mime="text/csv"
+fig5 = px.scatter(
+    df,
+    x="Count",
+    y="CV",
+    color="Blend",
+    size="Neps",
+    hover_data=["M.C","Lot"]
+)
+
+st.plotly_chart(
+    fig5,
+    use_container_width=True
+)
+
+# =====================================
+# PARETO
+# =====================================
+
+st.header("📊 Pareto Neps")
+
+pareto = machine_summary.sort_values(
+    "Neps",
+    ascending=False
+)
+
+fig6 = px.bar(
+    pareto,
+    x="M.C",
+    y="Neps",
+    color="Neps"
+)
+
+st.plotly_chart(
+    fig6,
+    use_container_width=True
+)
+
+# =====================================
+# EXECUTIVE SUMMARY
+# =====================================
+
+st.header("📌 Executive Summary")
+
+best_machine = machine_summary.loc[
+    machine_summary["Ner%"].idxmax()
+]
+
+worst_machine = machine_summary.loc[
+    machine_summary["Ner%"].idxmin()
+]
+
+st.success(
+    f"""
+أفضل ماكينة: {best_machine['M.C']}
+
+الكفاءة: {best_machine['Ner%']:.1f}%
+
+CV: {best_machine['CV']:.2f}
+
+Neps: {best_machine['Neps']:.0f}
+"""
+)
+
+st.error(
+    f"""
+أسوأ ماكينة: {worst_machine['M.C']}
+
+الكفاءة: {worst_machine['Ner%']:.1f}%
+
+CV: {worst_machine['CV']:.2f}
+
+Neps: {worst_machine['Neps']:.0f}
+"""
+)
+
+# =====================================
+# DATA TABLE
+# =====================================
+
+st.header("📋 Data")
+
+st.dataframe(
+    df,
+    use_container_width=True
 )

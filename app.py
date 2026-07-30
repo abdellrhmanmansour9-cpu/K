@@ -1,428 +1,473 @@
-import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import numpy as np
+from pathlib import Path
+from sklearn.ensemble import IsolationForest
 
-# ==================================================
-# PAGE CONFIG
-# ==================================================
+# =====================================================
+# SETTINGS
+# =====================================================
 
-st.set_page_config(
-    page_title="Carding Quality Dashboard",
-    page_icon="🧵",
-    layout="wide"
-)
+DATA_FOLDER = "data"
+OUTPUT_FILE = "Quality_Report.xlsx"
 
-st.title("🧵 Carding Quality Dashboard")
+# =====================================================
+# LOAD DATA
+# =====================================================
 
-# ==================================================
-# UPLOAD FILE
-# ==================================================
+def load_data(folder):
 
-uploaded_file = st.file_uploader(
-    "Upload Excel Workbook",
-    type=["xlsx", "xls", "csv"]
-)
+    dataframes = []
 
-if uploaded_file is None:
-    st.info("Upload your Carding Workbook")
-    st.stop()
+    files = list(Path(folder).glob("*.xlsx"))
 
-# ==================================================
-# READ DATA
-# ==================================================
+    if not files:
+        raise Exception("No Excel files found")
 
-try:
+    for file in files:
 
-    if uploaded_file.name.endswith(".csv"):
+        print(f"Loading : {file.name}")
 
-        df = pd.read_csv(uploaded_file)
+        try:
+
+            sheets = pd.read_excel(
+                file,
+                sheet_name=None
+            )
+
+            for sheet_name, df in sheets.items():
+
+                df["Stage"] = file.stem
+                df["Sheet"] = sheet_name
+
+                dataframes.append(df)
+
+        except Exception:
+
+            df = pd.read_excel(file)
+
+            df["Stage"] = file.stem
+            df["Sheet"] = "Data"
+
+            dataframes.append(df)
+
+    return pd.concat(
+        dataframes,
+        ignore_index=True
+    )
+
+# =====================================================
+# QUALITY SCORE
+# =====================================================
+
+def add_quality_score(df):
+
+    score = (
+
+        (df["RKM"] * 3)
+
+        + (df["ELG"] * 2)
+
+        + (df["Bforce"] / 20)
+
+        - (df["CVm"] * 2)
+
+        - (df["IPI"] * 0.05)
+
+        - (df["NEPS"] * 0.02)
+
+    )
+
+    score = score.fillna(score.mean())
+
+    normalized = (
+
+        (score - score.min())
+
+        / (score.max() - score.min())
+
+    ) * 100
+
+    df["Quality_Score"] = normalized
+
+    conditions = [
+
+        normalized >= 90,
+        normalized >= 80,
+        normalized >= 70,
+        normalized >= 60
+
+    ]
+
+    values = [
+
+        "A+",
+        "A",
+        "B",
+        "C"
+
+    ]
+
+    df["Quality_Grade"] = np.select(
+        conditions,
+        values,
+        default="D"
+    )
+
+    return df
+
+# =====================================================
+# ROOT CAUSE
+# =====================================================
+
+def root_cause(row):
+
+    causes = []
+
+    if row.get("NEPS",0) > 150:
+        causes.append("Carding Issue")
+
+    if row.get("THICK",0) > 150:
+        causes.append("Drafting Issue")
+
+    if row.get("THIN",0) > 10:
+        causes.append("Material Variation")
+
+    if row.get("CVm",0) > 14:
+        causes.append("Mass Variation")
+
+    if row.get("RKM",100) < 15:
+        causes.append("Low Strength")
+
+    if len(causes) == 0:
+        causes.append("Stable Process")
+
+    return " | ".join(causes)
+
+# =====================================================
+# ANOMALY DETECTION
+# =====================================================
+
+def detect_anomalies(df):
+
+    features = [
+
+        "CVm",
+        "IPI",
+        "RKM",
+        "ELG",
+        "Bforce"
+
+    ]
+
+    existing = [
+        c for c in features
+        if c in df.columns
+    ]
+
+    model = IsolationForest(
+        contamination=0.05,
+        random_state=42
+    )
+
+    temp = df[existing].fillna(0)
+
+    df["Anomaly"] = model.fit_predict(temp)
+
+    df["Anomaly"] = df["Anomaly"].replace({
+        -1:"Yes",
+         1:"No"
+    })
+
+    return df
+
+# =====================================================
+# SUMMARIES
+# =====================================================
+
+def stage_summary(df):
+
+    return (
+
+        df.groupby("Stage")
+
+        .agg({
+
+            "CVm":"mean",
+            "IPI":"mean",
+            "RKM":"mean",
+            "ELG":"mean",
+            "Bforce":"mean",
+            "Quality_Score":"mean"
+
+        })
+
+        .round(2)
+
+        .sort_values(
+            "Quality_Score",
+            ascending=False
+        )
+    )
+
+def product_summary(df):
+
+    if "Product" not in df.columns:
+        return pd.DataFrame()
+
+    return (
+
+        df.groupby("Product")
+
+        .agg({
+
+            "CVm":"mean",
+            "IPI":"mean",
+            "RKM":"mean",
+            "ELG":"mean",
+            "Bforce":"mean",
+            "Quality_Score":"mean"
+
+        })
+
+        .round(2)
+
+        .sort_values(
+            "Quality_Score",
+            ascending=False
+        )
+    )
+
+def blend_summary(df):
+
+    blend_col = None
+
+    for c in ["Blend","BLEND"]:
+        if c in df.columns:
+            blend_col = c
+
+    if blend_col is None:
+        return pd.DataFrame()
+
+    return (
+
+        df.groupby(blend_col)
+
+        .agg({
+
+            "CVm":"mean",
+            "IPI":"mean",
+            "RKM":"mean",
+            "ELG":"mean",
+            "Bforce":"mean",
+            "Quality_Score":"mean"
+
+        })
+
+        .round(2)
+
+        .sort_values(
+            "Quality_Score",
+            ascending=False
+        )
+    )
+
+def lot_summary(df):
+
+    if "LOT" not in df.columns:
+        return pd.DataFrame()
+
+    return (
+
+        df.groupby("LOT")
+
+        .agg({
+
+            "CVm":"mean",
+            "IPI":"mean",
+            "RKM":"mean",
+            "ELG":"mean",
+            "Bforce":"mean",
+            "Quality_Score":"mean"
+
+        })
+
+        .round(2)
+
+    )
+
+# =====================================================
+# EXECUTIVE SUMMARY
+# =====================================================
+
+def executive_summary(df):
+
+    best_product = ""
+
+    if "Product" in df.columns:
+
+        temp = (
+            df.groupby("Product")
+            ["Quality_Score"]
+            .mean()
+        )
+
+        best_product = temp.idxmax()
+
+        worst_product = temp.idxmin()
 
     else:
 
-        sheets = pd.read_excel(
-            uploaded_file,
-            sheet_name=None
-        )
+        best_product = "NA"
+        worst_product = "NA"
 
-        df = pd.concat(
-            [
-                sheet.assign(SHEET=name)
-                for name, sheet in sheets.items()
-            ],
-            ignore_index=True
-        )
+    summary = pd.DataFrame({
 
-except Exception as e:
+        "Metric":[
 
-    st.error(str(e))
-    st.stop()
+            "Total Records",
+            "Average Quality Score",
+            "Best Product",
+            "Worst Product",
+            "Average CVm",
+            "Average IPI",
+            "Average RKM"
 
-# ==================================================
-# CLEAN COLUMN NAMES
-# ==================================================
+        ],
 
-df.columns = df.columns.str.strip()
+        "Value":[
 
-required_columns = [
-    "M.C",
-    "Lot",
-    "Count",
-    "CV",
-    "Neps",
-    "Ner%",
-    "Blend"
-]
-
-missing = [
-    col for col in required_columns
-    if col not in df.columns
-]
-
-if missing:
-
-    st.error(f"Missing Columns: {missing}")
-    st.write(df.columns.tolist())
-    st.stop()
-
-# ==================================================
-# NUMERIC CONVERSION
-# ==================================================
-
-df["Count"] = pd.to_numeric(df["Count"], errors="coerce")
-df["CV"] = pd.to_numeric(df["CV"], errors="coerce")
-df["Neps"] = pd.to_numeric(df["Neps"], errors="coerce")
-df["Ner%"] = pd.to_numeric(df["Ner%"], errors="coerce")
-
-# لو الكفاءة 0.75 تتحول 75%
-
-if df["Ner%"].max() <= 1:
-    df["Ner%"] = df["Ner%"] * 100
-
-# ==================================================
-# KPI
-# ==================================================
-
-st.header("📊 KPI")
-
-k1, k2, k3, k4 = st.columns(4)
-
-with k1:
-    st.metric(
-        "Average Count",
-        f"{df['Count'].mean():.2f}"
-    )
-
-with k2:
-    st.metric(
-        "Average CV",
-        f"{df['CV'].mean():.2f}"
-    )
-
-with k3:
-    st.metric(
-        "Average Neps",
-        f"{df['Neps'].mean():.0f}"
-    )
-
-with k4:
-    st.metric(
-        "Average Efficiency",
-        f"{df['Ner%'].mean():.1f}%"
-    )
-
-# ==================================================
-# QUALITY SCORE
-# ==================================================
-
-avg_cv = df["CV"].mean()
-avg_neps = df["Neps"].mean()
-avg_eff = df["Ner%"].mean()
-
-quality_score = 100
-
-if avg_cv > 4:
-    quality_score -= 30
-
-if avg_neps > 120:
-    quality_score -= 30
-
-if avg_eff < 75:
-    quality_score -= 40
-
-quality_score = max(0, quality_score)
-
-st.header("🎯 Quality Score")
-
-fig_gauge = go.Figure(
-    go.Indicator(
-        mode="gauge+number",
-        value=quality_score,
-        title={"text": "Quality Score"},
-        gauge={
-            "axis": {"range": [0, 100]},
-            "steps": [
-                {"range": [0, 50], "color": "red"},
-                {"range": [50, 75], "color": "orange"},
-                {"range": [75, 100], "color": "green"}
-            ]
-        }
-    )
-)
-
-st.plotly_chart(
-    fig_gauge,
-    use_container_width=True
-)
-
-# ==================================================
-# MACHINE SUMMARY
-# ==================================================
-
-machine_summary = (
-    df.groupby("M.C")
-    .agg({
-        "Count": "mean",
-        "CV": "mean",
-        "Neps": "mean",
-        "Ner%": "mean"
+            len(df),
+            round(
+                df["Quality_Score"].mean(),
+                2
+            ),
+            best_product,
+            worst_product,
+            round(
+                df["CVm"].mean(),
+                2
+            ),
+            round(
+                df["IPI"].mean(),
+                2
+            ),
+            round(
+                df["RKM"].mean(),
+                2
+            )
+        ]
     })
-    .round(2)
-    .reset_index()
-)
 
-ranking = machine_summary.sort_values(
-    by="Ner%",
-    ascending=False
-).reset_index(drop=True)
+    return summary
 
-ranking.index += 1
+# =====================================================
+# EXPORT
+# =====================================================
 
-# ==================================================
-# MACHINE RANKING
-# ==================================================
+def export_all(
 
-st.header("🏅 Machine Ranking")
+    summary,
+    stage,
+    product,
+    blend,
+    lot,
+    anomalies
 
-st.dataframe(
-    ranking,
-    use_container_width=True
-)
+):
 
-# ==================================================
-# BEST & WORST MACHINE
-# ==================================================
+    with pd.ExcelWriter(
+        OUTPUT_FILE,
+        engine="xlsxwriter"
+    ) as writer:
 
-best_machine = ranking.iloc[0]
-worst_machine = ranking.iloc[-1]
+        summary.to_excel(
+            writer,
+            sheet_name="Executive",
+            index=False
+        )
 
-col1, col2 = st.columns(2)
+        stage.to_excel(
+            writer,
+            sheet_name="Stage_Summary"
+        )
 
-with col1:
+        product.to_excel(
+            writer,
+            sheet_name="Product_Summary"
+        )
 
-    st.success(
-        f"""
-🏆 أفضل ماكينة
+        blend.to_excel(
+            writer,
+            sheet_name="Blend_Summary"
+        )
 
-رقم الماكينة : {best_machine['M.C']}
+        lot.to_excel(
+            writer,
+            sheet_name="Lot_Summary"
+        )
 
-الكفاءة : {best_machine['Ner%']:.1f}%
+        anomalies.to_excel(
+            writer,
+            sheet_name="Anomalies",
+            index=False
+        )
 
-CV : {best_machine['CV']:.2f}
+# =====================================================
+# MAIN
+# =====================================================
 
-Neps : {best_machine['Neps']:.0f}
-"""
+def main():
+
+    df = load_data(DATA_FOLDER)
+
+    df = add_quality_score(df)
+
+    df["Root_Cause"] = (
+        df.apply(
+            root_cause,
+            axis=1
+        )
     )
 
-with col2:
+    df = detect_anomalies(df)
 
-    st.error(
-        f"""
-🔻 أسوأ ماكينة
+    stage = stage_summary(df)
 
-رقم الماكينة : {worst_machine['M.C']}
+    product = product_summary(df)
 
-الكفاءة : {worst_machine['Ner%']:.1f}%
+    blend = blend_summary(df)
 
-CV : {worst_machine['CV']:.2f}
+    lot = lot_summary(df)
 
-Neps : {worst_machine['Neps']:.0f}
-"""
+    summary = executive_summary(df)
+
+    anomalies = (
+
+        df[df["Anomaly"] == "Yes"]
+
+        .sort_values(
+            "Quality_Score"
+        )
+
     )
 
-# ==================================================
-# CHARTS
-# ==================================================
+    export_all(
 
-st.header("📈 Charts")
+        summary,
+        stage,
+        product,
+        blend,
+        lot,
+        anomalies
 
-c1, c2 = st.columns(2)
-
-with c1:
-
-    fig1 = px.bar(
-        ranking,
-        x="M.C",
-        y="Ner%",
-        color="Ner%",
-        title="Machine Efficiency %",
-        text_auto=".1f"
     )
 
-    st.plotly_chart(
-        fig1,
-        use_container_width=True
-    )
+    print("="*50)
+    print("QUALITY ANALYSIS COMPLETED")
+    print("="*50)
+    print(f"Records : {len(df)}")
+    print(f"Average Quality Score : {round(df['Quality_Score'].mean(),2)}")
+    print(f"Report Saved : {OUTPUT_FILE}")
 
-with c2:
-
-    fig2 = px.bar(
-        ranking,
-        x="M.C",
-        y="CV",
-        color="CV",
-        title="CV By Machine",
-        text_auto=".2f"
-    )
-
-    st.plotly_chart(
-        fig2,
-        use_container_width=True
-    )
-
-c3, c4 = st.columns(2)
-
-with c3:
-
-    fig3 = px.bar(
-        ranking,
-        x="M.C",
-        y="Neps",
-        color="Neps",
-        title="Neps By Machine",
-        text_auto=".0f"
-    )
-
-    st.plotly_chart(
-        fig3,
-        use_container_width=True
-    )
-
-with c4:
-
-    blend_summary = (
-        df.groupby("Blend")
-        .agg({
-            "CV": "mean",
-            "Neps": "mean",
-            "Ner%": "mean"
-        })
-        .round(2)
-        .reset_index()
-    )
-
-    fig4 = px.bar(
-        blend_summary,
-        x="Blend",
-        y="Ner%",
-        color="Blend",
-        title="Blend Efficiency"
-    )
-
-    st.plotly_chart(
-        fig4,
-        use_container_width=True
-    )
-
-# ==================================================
-# COUNT VS CV
-# ==================================================
-
-st.header("📈 Count vs CV")
-
-fig_scatter = px.scatter(
-    df,
-    x="Count",
-    y="CV",
-    color="Blend",
-    size="Neps",
-    hover_data=["Lot", "M.C"]
-)
-
-st.plotly_chart(
-    fig_scatter,
-    use_container_width=True
-)
-
-# ==================================================
-# PARETO
-# ==================================================
-
-st.header("📊 Pareto Neps Analysis")
-
-pareto = ranking.sort_values(
-    "Neps",
-    ascending=False
-)
-
-fig_pareto = px.bar(
-    pareto,
-    x="M.C",
-    y="Neps",
-    color="Neps"
-)
-
-st.plotly_chart(
-    fig_pareto,
-    use_container_width=True
-)
-
-# ==================================================
-# EXECUTIVE SUMMARY
-# ==================================================
-
-st.header("📌 Executive Summary")
-
-if quality_score >= 85:
-
-    st.success(
-        "✅ جودة مرحلة الكارد ممتازة"
-    )
-
-elif quality_score >= 70:
-
-    st.warning(
-        "⚠️ جودة مرحلة الكارد جيدة وتحتاج متابعة"
-    )
-
-else:
-
-    st.error(
-        "❌ توجد مشكلات تحتاج مراجعة"
-    )
-
-# ==================================================
-# DATA
-# ==================================================
-
-st.header("📋 Data")
-
-st.dataframe(
-    df,
-    use_container_width=True
-)
-
-# ==================================================
-# DOWNLOAD
-# ==================================================
-
-csv = df.to_csv(
-    index=False
-).encode("utf-8-sig")
-
-st.download_button(
-    "📥 Download Report",
-    data=csv,
-    file_name="Carding_Report.csv",
-    mime="text/csv"
-)
+if __name__ == "__main__":
+    main()

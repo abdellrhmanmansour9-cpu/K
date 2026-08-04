@@ -1,283 +1,112 @@
-import streamlit as st
-import pandas as pd
+import plotly.graph_objects as go
 
-# ==================================
-# PAGE CONFIG
-# ==================================
+if "NEPS" in df.columns:
 
-st.set_page_config(
-    page_title="BeLYarn Quality System",
-    page_icon="🧵",
-    layout="wide"
-)
+    score = 100 - df["NEPS"].dropna().mean()
 
-st.title("🧵 BeLYarn Quality System")
-st.subheader("Quality Control Weekly Dashboard")
+    score = max(0, min(100, score))
 
-# ==================================
-# FILE UPLOAD
-# ==================================
-
-uploaded_file = st.file_uploader(
-    "Upload Weekly Quality Report",
-    type=["xlsx", "xls"]
-)
-
-if uploaded_file:
-
-    xls = pd.ExcelFile(uploaded_file)
-
-    sheet = st.sidebar.selectbox(
-        "Select Stage",
-        xls.sheet_names
+    fig_gauge = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=score,
+            title={"text": "Quality Score"},
+            gauge={
+                "axis": {"range": [0, 100]},
+                "steps": [
+                    {"range": [0, 50], "color": "red"},
+                    {"range": [50, 75], "color": "orange"},
+                    {"range": [75, 100], "color": "green"},
+                ],
+            },
+        )
     )
 
-    df = pd.read_excel(
-        uploaded_file,
-        sheet_name=sheet
+    st.plotly_chart(
+        fig_gauge,
+        use_container_width=True
+    )
+    import plotly.express as px
+
+if "M.C" in df.columns and "C.V" in df.columns:
+
+    fig_cv = px.bar(
+        df,
+        x="M.C",
+        y="C.V",
+        color="C.V",
+        text_auto=".2f",
+        title="CV By Machine"
     )
 
-    df.columns = df.columns.str.strip()
+    st.plotly_chart(
+        fig_cv,
+        use_container_width=True
+    )
+    if "M.C" in df.columns and "NEPS" in df.columns:
 
-    # ==================================
-    # CLEAN DATA
-    # ==================================
+    fig_neps = px.bar(
+        df,
+        x="M.C",
+        y="NEPS",
+        color="NEPS",
+        text_auto=".0f",
+        title="Neps By Machine"
+    )
 
-    if "NEPS" in df.columns:
-        df["NEPS"] = pd.to_numeric(
-            df["NEPS"],
-            errors="coerce"
-        )
-
-        # صفر = غير محلل
-        df["NEPS"] = df["NEPS"].replace(
-            0,
-            pd.NA
-        )
-
-    if "NER%" in df.columns:
-
-        df["NER%"] = pd.to_numeric(
-            df["NER%"],
-            errors="coerce"
-        )
-
-        # صفر = غير محلل
-        df["NER%"] = df["NER%"].replace(
-            0,
-            pd.NA
-        )
-
-        valid = df["NER%"].dropna()
-
-        if len(valid) > 0 and valid.max() <= 1:
-
-            df["NER%"] = df["NER%"] * 100
-
-    # ==================================
-    # FILTERS
-    # ==================================
-
-    st.sidebar.header("🎯 Filters")
-
-    if "LOT" in df.columns:
-
-        lots = st.sidebar.multiselect(
-            "LOT",
-            sorted(df["LOT"].dropna().unique())
-        )
-
-        if lots:
-            df = df[df["LOT"].isin(lots)]
-
-    if "BLEND" in df.columns:
-
-        blends = st.sidebar.multiselect(
-            "Blend",
-            sorted(df["BLEND"].dropna().unique())
-        )
-
-        if blends:
-            df = df[df["BLEND"].isin(blends)]
-
-    if "M.C" in df.columns:
-
-        machines = st.sidebar.multiselect(
-            "Machine",
-            sorted(df["M.C"].dropna().unique())
-        )
-
-        if machines:
-            df = df[df["M.C"].isin(machines)]
-
-    # ==================================
-    # KPI
-    # ==================================
-
-    st.header(f"📊 {sheet}")
-
-    k1, k2, k3, k4 = st.columns(4)
-
-    if "COUNT" in df.columns:
-        k1.metric(
-            "Average Count",
-            f"{df['COUNT'].mean():.2f}"
-        )
-
-    elif "Act.Count" in df.columns:
-        k1.metric(
-            "Average Count",
-            f"{df['Act.Count'].mean():.2f}"
-        )
-
-    if "C.V" in df.columns:
-        k2.metric(
-            "Average CV",
-            f"{df['C.V'].mean():.2f}"
-        )
-
-    elif "C.V m" in df.columns:
-        k2.metric(
-            "Average CVm",
-            f"{df['C.V m'].mean():.2f}"
-        )
-
-    if "NEPS" in df.columns:
-        k3.metric(
-            "Average Neps",
-            f"{df['NEPS'].dropna().mean():.0f}"
-        )
-
-    if "NER%" in df.columns:
-        k4.metric(
-            "Average NER%",
-            f"{df['NER%'].dropna().mean():.1f}%"
-        )
-
-    elif "RKM" in df.columns:
-        k4.metric(
-            "Average RKM",
-            f"{df['RKM'].mean():.2f}"
-        )
-
-    # ==================================
-    # MACHINE RANKING
-    # ==================================
-
+    st.plotly_chart(
+        fig_neps,
+        use_container_width=True
+    )
     if (
-        "M.C" in df.columns
-        and "C.V" in df.columns
-        and "NEPS" in df.columns
-    ):
+    "M.C" in df.columns
+    and "LOT" in df.columns
+    and "NEPS" in df.columns
+):
 
-        ranking = df.dropna(
-            subset=["NEPS"]
-        ).copy()
+    heat = px.density_heatmap(
+        df,
+        x="M.C",
+        y="LOT",
+        z="NEPS",
+        color_continuous_scale="RdYlGn_r",
+        title="Neps Heatmap"
+    )
 
-        if len(ranking) > 0:
-
-            if "NER%" in ranking.columns:
-
-                ranking["Quality Score"] = (
-                    (100 - ranking["NEPS"])
-                    + (100 - ranking["C.V"] * 10)
-                    + ranking["NER%"].fillna(0)
-                )
-
-            else:
-
-                ranking["Quality Score"] = (
-                    (100 - ranking["NEPS"])
-                    + (100 - ranking["C.V"] * 10)
-                )
-
-            ranking = ranking.sort_values(
-                "Quality Score",
-                ascending=False
-            )
-
-            best = ranking.iloc[0]
-            worst = ranking.iloc[-1]
-
-            c1, c2 = st.columns(2)
-
-            with c1:
-                st.success(
-                    f"""
-🏆 Best Machine
-
-Machine : {best['M.C']}
-
-CV : {best['C.V']:.2f}
-
-Neps : {best['NEPS']:.0f}
-"""
-                )
-
-            with c2:
-                st.error(
-                    f"""
-🔻 Worst Machine
-
-Machine : {worst['M.C']}
-
-CV : {worst['C.V']:.2f}
-
-Neps : {worst['NEPS']:.0f}
-"""
-                )
-
-            st.subheader("🏅 Machine Ranking")
-
-            st.dataframe(
-                ranking,
-                use_container_width=True
-            )
-
-    # ==================================
-    # BLEND ANALYSIS
-    # ==================================
-
+    st.plotly_chart(
+        heat,
+        use_container_width=True
+    )
     if "BLEND" in df.columns:
 
-        st.subheader("🧶 Blend Analysis")
+    st.subheader("📊 Blend Pivot")
 
-        blend_summary = (
-            df.groupby("BLEND")
-            .mean(numeric_only=True)
-            .reset_index()
-        )
-
-        st.dataframe(
-            blend_summary,
-            use_container_width=True
-        )
-
-    # ==================================
-    # LOT ANALYSIS
-    # ==================================
-
-    if "LOT" in df.columns:
-
-        st.subheader("📦 LOT Analysis")
-
-        lot = st.selectbox(
-            "Select LOT",
-            sorted(df["LOT"].dropna().unique())
-        )
-
-        st.dataframe(
-            df[df["LOT"] == lot],
-            use_container_width=True
-        )
-
-    # ==================================
-    # RAW DATA
-    # ==================================
-
-    st.subheader("📋 Raw Data")
+    pivot = pd.pivot_table(
+        df,
+        values=[
+            c for c in df.columns
+            if c not in ["LOT", "BLEND", "M.C"]
+        ],
+        index="BLEND",
+        aggfunc="mean"
+    )
 
     st.dataframe(
-        df,
+        pivot,
         use_container_width=True
+    )
+    st.subheader("📌 Executive Summary")
+
+if "NEPS" in df.columns:
+
+    best = df.loc[df["NEPS"].idxmin()]
+
+    worst = df.loc[df["NEPS"].idxmax()]
+
+    st.success(
+        f"🏆 Best Machine : {best['M.C']}"
+    )
+
+    st.error(
+        f"🔻 Worst Machine : {worst['M.C']}"
     )

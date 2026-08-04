@@ -1,290 +1,242 @@
-import streamlit as st
-import pandas as pd
-
 # =================================
-# PAGE CONFIG
+# CLEANING DATA
 # =================================
 
-st.set_page_config(
-    page_title="BeLYarn Quality System",
-    page_icon="🧵",
-    layout="wide"
-)
+# تحويل الأعمدة الرقمية
 
-st.title("🧵 BeLYarn Quality System")
-st.subheader("Quality Control Dashboard")
+for col in df.columns:
+
+    try:
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="ignore"
+        )
+    except:
+        pass
 
 # =================================
-# UPLOAD
+# IGNORE ZERO VALUES
 # =================================
 
-uploaded_file = st.file_uploader(
-    "Upload Weekly Report",
-    type=["xlsx", "xls"]
-)
+for col in df.columns:
 
-if uploaded_file:
+    col_name = str(col).upper()
 
-    xls = pd.ExcelFile(uploaded_file)
+    # تجاهل النبس = 0
 
-    sheet = st.sidebar.selectbox(
-        "Select Stage",
-        xls.sheet_names
+    if "NEPS" in col_name:
+
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
+        )
+
+        df[col] = df[col].replace(
+            0,
+            pd.NA
+        )
+
+    # تجاهل الكفاءة = 0
+
+    if "NER%" in col_name:
+
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
+        )
+
+        df[col] = df[col].replace(
+            0,
+            pd.NA
+        )
+
+        # لو الكفاءة مخزنة 0.75
+
+        temp = df[col].dropna()
+
+        if len(temp) > 0:
+
+            if temp.max() <= 1:
+
+                df[col] = df[col] * 100
+
+# =================================
+# KPI
+# =================================
+
+st.header("📊 KPI")
+
+k1, k2, k3, k4 = st.columns(4)
+
+# COUNT
+
+if "COUNT" in df.columns:
+
+    k1.metric(
+        "Average Count",
+        f"{df['COUNT'].mean():.2f}"
     )
 
-    df = pd.read_excel(
-        uploaded_file,
-        sheet_name=sheet
+elif "Act.Count" in df.columns:
+
+    k1.metric(
+        "Average Count",
+        f"{df['Act.Count'].mean():.2f}"
     )
 
-    df.columns = df.columns.str.strip()
+# CV
 
-    st.header(f"📊 {sheet}")
+if "C.V" in df.columns:
 
-    # ==========================
-    # KPI CARD
-    # ==========================
+    k2.metric(
+        "Average CV",
+        f"{df['C.V'].mean():.2f}"
+    )
 
-    cols = st.columns(4)
+elif "C.V m" in df.columns:
 
-    if "COUNT" in df.columns:
+    k2.metric(
+        "Average CVm",
+        f"{df['C.V m'].mean():.2f}"
+    )
 
-        cols[0].metric(
-            "Avg Count",
-            f"{df['COUNT'].mean():.2f}"
-        )
+# NEPS
 
-    elif "Act.Count" in df.columns:
+if "NEPS" in df.columns:
 
-        cols[0].metric(
-            "Avg Count",
-            f"{df['Act.Count'].mean():.2f}"
-        )
+    k3.metric(
+        "Average Neps",
+        f"{df['NEPS'].dropna().mean():.0f}"
+    )
 
-    if "C.V" in df.columns:
+# NER OR RKM
 
-        cols[1].metric(
-            "Avg CV",
-            f"{df['C.V'].mean():.2f}"
-        )
+if "NER%" in df.columns:
 
-    elif "C.V m" in df.columns:
+    k4.metric(
+        "Average NER%",
+        f"{df['NER%'].dropna().mean():.1f}%"
+    )
 
-        cols[1].metric(
-            "Avg CVm",
-            f"{df['C.V m'].mean():.2f}"
-        )
+elif "RKM" in df.columns:
 
-    if "NEPS" in df.columns:
+    k4.metric(
+        "Average RKM",
+        f"{df['RKM'].mean():.2f}"
+    )
 
-        cols[2].metric(
-            "Avg Neps",
-            f"{df['NEPS'].mean():.0f}"
-        )
+# =================================
+# MACHINE RANKING
+# =================================
 
-    if "NER%" in df.columns:
+if "M.C" in df.columns:
 
-        cols[3].metric(
-            "Avg NER%",
-            f"{df['NER%'].mean():.1f}%"
-        )
+    ranking = df.copy()
 
-    elif "RKM" in df.columns:
+    if "NEPS" in ranking.columns:
 
-        cols[3].metric(
-            "Avg RKM",
-            f"{df['RKM'].mean():.2f}"
-        )
+        ranking = ranking[
+            ranking["NEPS"].notna()
+        ]
 
-    # ==========================
-    # BEST / WORST
-    # ==========================
+    if "NER%" in ranking.columns:
 
-    if all(col in df.columns for col in ["C.V", "NEPS"]):
+        ranking = ranking[
+            ranking["NER%"].notna()
+        ]
 
-        ranking = df.copy()
+    # CARD
 
-        if "NER%" in df.columns:
-
-            ranking["Quality Score"] = (
-                (100 - ranking["NEPS"])
-                +
-                (100 - ranking["C.V"] * 10)
-                +
-                ranking["NER%"]
-            )
-
-        else:
-
-            ranking["Quality Score"] = (
-                (100 - ranking["NEPS"])
-                +
-                (100 - ranking["C.V"] * 10)
-            )
-
-        ranking = ranking.sort_values(
-            "Quality Score",
-            ascending=False
-        )
-
-        best = ranking.iloc[0]
-        worst = ranking.iloc[-1]
-
-        c1, c2 = st.columns(2)
-
-        with c1:
-
-            st.success(
-                f"""
-🏆 Best Machine
-
-Machine : {best['M.C']}
-
-CV : {best['C.V']:.2f}
-
-Neps : {best['NEPS']:.0f}
-"""
-            )
-
-        with c2:
-
-            st.error(
-                f"""
-🔻 Worst Machine
-
-Machine : {worst['M.C']}
-
-CV : {worst['C.V']:.2f}
-
-Neps : {worst['NEPS']:.0f}
-"""
-            )
-
-        st.subheader("🏅 Ranking")
-
-        st.dataframe(
-            ranking,
-            use_container_width=True
-        )
-
-    # ==========================
-    # WINDING ANALYSIS
-    # ==========================
-
-    if "IPI" in df.columns:
-
-        st.subheader("🧵 Winding Analysis")
-
-        ranking = df.copy()
+    if "NER%" in ranking.columns:
 
         ranking["Quality Score"] = (
 
-            (100 - ranking["C.V m"])
+            (100 - ranking["NEPS"])
 
             +
 
-            (100 - (ranking["IPI"] / 10))
+            (100 - ranking["C.V"] * 10)
 
             +
 
-            ranking["RKM"]
-
-            +
-
-            ranking["Bforce"]
+            ranking["NER%"]
 
         )
 
-        ranking = ranking.sort_values(
-            "Quality Score",
-            ascending=False
+    # BREAKER/FINISHER
+
+    elif "NEPS" in ranking.columns:
+
+        ranking["Quality Score"] = (
+
+            (100 - ranking["NEPS"])
+
+            +
+
+            (100 - ranking["C.V"] * 10)
+
         )
 
-        best = ranking.iloc[0]
-        worst = ranking.iloc[-1]
+    else:
 
-        c1, c2 = st.columns(2)
+        ranking["Quality Score"] = (
 
-        with c1:
+            100 - ranking["C.V"] * 10
 
-            st.success(
-                f"""
-🏆 Best Product
+        )
 
-Product : {best.get('Product','N/A')}
+    ranking = ranking.sort_values(
+        "Quality Score",
+        ascending=False
+    )
 
-CVm : {best['C.V m']:.2f}
+    best_machine = ranking.iloc[0]
 
-IPI : {best['IPI']}
+    worst_machine = ranking.iloc[-1]
 
-RKM : {best['RKM']:.2f}
+    st.header("🏆 Machine Performance")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+
+        st.success(
+            f"""
+🏆 Best Machine
+
+Machine : {best_machine['M.C']}
+
+CV : {best_machine['C.V']:.2f}
+
+Neps : {
+best_machine['NEPS']
+if 'NEPS' in ranking.columns
+else 'N/A'
+}
 """
-            )
+        )
 
-        with c2:
+    with c2:
 
-            st.error(
-                f"""
-🔻 Worst Product
+        st.error(
+            f"""
+🔻 Worst Machine
 
-Product : {worst.get('Product','N/A')}
+Machine : {worst_machine['M.C']}
 
-CVm : {worst['C.V m']:.2f}
+CV : {worst_machine['C.V']:.2f}
 
-IPI : {worst['IPI']}
-
-RKM : {worst['RKM']:.2f}
+Neps : {
+worst_machine['NEPS']
+if 'NEPS' in ranking.columns
+else 'N/A'
+}
 """
-            )
-
-    # ==========================
-    # BLEND ANALYSIS
-    # ==========================
-
-    if "BLEND" in df.columns:
-
-        st.subheader("🧶 Blend Analysis")
-
-        blend_summary = (
-            df.groupby("BLEND")
-            .mean(numeric_only=True)
-            .reset_index()
         )
 
-        st.dataframe(
-            blend_summary,
-            use_container_width=True
-        )
-
-    # ==========================
-    # LOT ANALYSIS
-    # ==========================
-
-    if "LOT" in df.columns:
-
-        st.subheader("📦 LOT Analysis")
-
-        selected_lot = st.selectbox(
-            "Select LOT",
-            sorted(df["LOT"].dropna().unique())
-        )
-
-        lot_data = df[
-            df["LOT"] == selected_lot
-        ]
-
-        st.dataframe(
-            lot_data,
-            use_container_width=True
-        )
-
-    # ==========================
-    # RAW DATA
-    # ==========================
-
-    st.subheader("📋 Raw Data")
+    st.subheader("🏅 Ranking")
 
     st.dataframe(
-        df,
+        ranking,
         use_container_width=True
     )

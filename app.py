@@ -1,242 +1,320 @@
-# =================================
-# CLEANING DATA
-# =================================
+import streamlit as st
+import pandas as pd
 
-# تحويل الأعمدة الرقمية
+# ==================================
+# PAGE CONFIG
+# ==================================
 
-for col in df.columns:
+st.set_page_config(
+    page_title="BeLYarn Quality System",
+    page_icon="🧵",
+    layout="wide"
+)
 
-    try:
-        df[col] = pd.to_numeric(
-            df[col],
-            errors="ignore"
-        )
-    except:
-        pass
+st.title("🧵 BeLYarn Quality System")
+st.subheader("Quality Control Weekly Dashboard")
 
-# =================================
-# IGNORE ZERO VALUES
-# =================================
+# ==================================
+# FILE UPLOAD
+# ==================================
 
-for col in df.columns:
+uploaded_file = st.file_uploader(
+    "Upload Weekly Quality Report",
+    type=["xlsx", "xls"]
+)
 
-    col_name = str(col).upper()
+if uploaded_file:
 
-    # تجاهل النبس = 0
+    xls = pd.ExcelFile(uploaded_file)
 
-    if "NEPS" in col_name:
+    sheet = st.sidebar.selectbox(
+        "Select Stage",
+        xls.sheet_names
+    )
 
-        df[col] = pd.to_numeric(
-            df[col],
+    df = pd.read_excel(
+        uploaded_file,
+        sheet_name=sheet
+    )
+
+    df.columns = df.columns.str.strip()
+
+    # ==================================
+    # CLEANING
+    # ==================================
+
+    for col in df.columns:
+
+        try:
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="ignore"
+            )
+        except:
+            pass
+
+    # تجاهل النبس = صفر
+
+    if "NEPS" in df.columns:
+
+        df["NEPS"] = pd.to_numeric(
+            df["NEPS"],
             errors="coerce"
         )
 
-        df[col] = df[col].replace(
+        df["NEPS"] = df["NEPS"].replace(
             0,
             pd.NA
         )
 
-    # تجاهل الكفاءة = 0
+    # تجاهل الكفاءة = صفر
 
-    if "NER%" in col_name:
+    if "NER%" in df.columns:
 
-        df[col] = pd.to_numeric(
-            df[col],
+        df["NER%"] = pd.to_numeric(
+            df["NER%"],
             errors="coerce"
         )
 
-        df[col] = df[col].replace(
+        df["NER%"] = df["NER%"].replace(
             0,
             pd.NA
         )
 
-        # لو الكفاءة مخزنة 0.75
+        valid = df["NER%"].dropna()
 
-        temp = df[col].dropna()
+        if len(valid) > 0 and valid.max() <= 1:
 
-        if len(temp) > 0:
+            df["NER%"] = df["NER%"] * 100
 
-            if temp.max() <= 1:
+    # ==================================
+    # SIDEBAR FILTERS
+    # ==================================
 
-                df[col] = df[col] * 100
+    if "LOT" in df.columns:
 
-# =================================
-# KPI
-# =================================
-
-st.header("📊 KPI")
-
-k1, k2, k3, k4 = st.columns(4)
-
-# COUNT
-
-if "COUNT" in df.columns:
-
-    k1.metric(
-        "Average Count",
-        f"{df['COUNT'].mean():.2f}"
-    )
-
-elif "Act.Count" in df.columns:
-
-    k1.metric(
-        "Average Count",
-        f"{df['Act.Count'].mean():.2f}"
-    )
-
-# CV
-
-if "C.V" in df.columns:
-
-    k2.metric(
-        "Average CV",
-        f"{df['C.V'].mean():.2f}"
-    )
-
-elif "C.V m" in df.columns:
-
-    k2.metric(
-        "Average CVm",
-        f"{df['C.V m'].mean():.2f}"
-    )
-
-# NEPS
-
-if "NEPS" in df.columns:
-
-    k3.metric(
-        "Average Neps",
-        f"{df['NEPS'].dropna().mean():.0f}"
-    )
-
-# NER OR RKM
-
-if "NER%" in df.columns:
-
-    k4.metric(
-        "Average NER%",
-        f"{df['NER%'].dropna().mean():.1f}%"
-    )
-
-elif "RKM" in df.columns:
-
-    k4.metric(
-        "Average RKM",
-        f"{df['RKM'].mean():.2f}"
-    )
-
-# =================================
-# MACHINE RANKING
-# =================================
-
-if "M.C" in df.columns:
-
-    ranking = df.copy()
-
-    if "NEPS" in ranking.columns:
-
-        ranking = ranking[
-            ranking["NEPS"].notna()
-        ]
-
-    if "NER%" in ranking.columns:
-
-        ranking = ranking[
-            ranking["NER%"].notna()
-        ]
-
-    # CARD
-
-    if "NER%" in ranking.columns:
-
-        ranking["Quality Score"] = (
-
-            (100 - ranking["NEPS"])
-
-            +
-
-            (100 - ranking["C.V"] * 10)
-
-            +
-
-            ranking["NER%"]
-
+        lots = st.sidebar.multiselect(
+            "LOT",
+            sorted(df["LOT"].dropna().unique())
         )
 
-    # BREAKER/FINISHER
+        if lots:
+            df = df[df["LOT"].isin(lots)]
 
-    elif "NEPS" in ranking.columns:
+    if "BLEND" in df.columns:
 
-        ranking["Quality Score"] = (
-
-            (100 - ranking["NEPS"])
-
-            +
-
-            (100 - ranking["C.V"] * 10)
-
+        blends = st.sidebar.multiselect(
+            "Blend",
+            sorted(df["BLEND"].dropna().unique())
         )
 
-    else:
+        if blends:
+            df = df[df["BLEND"].isin(blends)]
 
-        ranking["Quality Score"] = (
+    if "M.C" in df.columns:
 
-            100 - ranking["C.V"] * 10
-
+        machines = st.sidebar.multiselect(
+            "Machine",
+            sorted(df["M.C"].dropna().unique())
         )
 
-    ranking = ranking.sort_values(
-        "Quality Score",
-        ascending=False
-    )
+        if machines:
+            df = df[df["M.C"].isin(machines)]
 
-    best_machine = ranking.iloc[0]
+    # ==================================
+    # KPI
+    # ==================================
 
-    worst_machine = ranking.iloc[-1]
+    st.header(f"📊 {sheet}")
 
-    st.header("🏆 Machine Performance")
+    k1, k2, k3, k4 = st.columns(4)
 
-    c1, c2 = st.columns(2)
+    if "COUNT" in df.columns:
 
-    with c1:
+        k1.metric(
+            "Average Count",
+            f"{df['COUNT'].mean():.2f}"
+        )
 
-        st.success(
-            f"""
+    elif "Act.Count" in df.columns:
+
+        k1.metric(
+            "Average Count",
+            f"{df['Act.Count'].mean():.2f}"
+        )
+
+    if "C.V" in df.columns:
+
+        k2.metric(
+            "Average CV",
+            f"{df['C.V'].mean():.2f}"
+        )
+
+    elif "C.V m" in df.columns:
+
+        k2.metric(
+            "Average CVm",
+            f"{df['C.V m'].mean():.2f}"
+        )
+
+    if "NEPS" in df.columns:
+
+        k3.metric(
+            "Average Neps",
+            f"{df['NEPS'].dropna().mean():.0f}"
+        )
+
+    if "NER%" in df.columns:
+
+        k4.metric(
+            "Average NER%",
+            f"{df['NER%'].dropna().mean():.1f}%"
+        )
+
+    elif "RKM" in df.columns:
+
+        k4.metric(
+            "Average RKM",
+            f"{df['RKM'].mean():.2f}"
+        )
+
+    # ==================================
+    # MACHINE RANKING
+    # ==================================
+
+    if "M.C" in df.columns and "C.V" in df.columns:
+
+        ranking = df.copy()
+
+        if "NEPS" in ranking.columns:
+
+            ranking = ranking[
+                ranking["NEPS"].notna()
+            ]
+
+        if len(ranking) > 0:
+
+            if "NER%" in ranking.columns:
+
+                ranking["Quality Score"] = (
+
+                    (100 - ranking["NEPS"])
+
+                    +
+
+                    (100 - ranking["C.V"] * 10)
+
+                    +
+
+                    ranking["NER%"]
+
+                )
+
+            elif "NEPS" in ranking.columns:
+
+                ranking["Quality Score"] = (
+
+                    (100 - ranking["NEPS"])
+
+                    +
+
+                    (100 - ranking["C.V"] * 10)
+
+                )
+
+            ranking = ranking.sort_values(
+                "Quality Score",
+                ascending=False
+            )
+
+            best = ranking.iloc[0]
+            worst = ranking.iloc[-1]
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                st.success(
+                    f"""
 🏆 Best Machine
 
-Machine : {best_machine['M.C']}
+Machine : {best['M.C']}
 
-CV : {best_machine['C.V']:.2f}
+CV : {best['C.V']:.2f}
 
-Neps : {
-best_machine['NEPS']
-if 'NEPS' in ranking.columns
-else 'N/A'
-}
+Neps : {best['NEPS']:.0f}
 """
-        )
+                )
 
-    with c2:
+            with col2:
 
-        st.error(
-            f"""
+                st.error(
+                    f"""
 🔻 Worst Machine
 
-Machine : {worst_machine['M.C']}
+Machine : {worst['M.C']}
 
-CV : {worst_machine['C.V']:.2f}
+CV : {worst['C.V']:.2f}
 
-Neps : {
-worst_machine['NEPS']
-if 'NEPS' in ranking.columns
-else 'N/A'
-}
+Neps : {worst['NEPS']:.0f}
 """
+                )
+
+            st.subheader("🏅 Ranking")
+
+            st.dataframe(
+                ranking,
+                use_container_width=True
+            )
+
+    # ==================================
+    # BLEND ANALYSIS
+    # ==================================
+
+    if "BLEND" in df.columns:
+
+        st.subheader("🧶 Blend Analysis")
+
+        blend_summary = (
+            df.groupby("BLEND")
+            .mean(numeric_only=True)
+            .reset_index()
         )
 
-    st.subheader("🏅 Ranking")
+        st.dataframe(
+            blend_summary,
+            use_container_width=True
+        )
+
+    # ==================================
+    # LOT ANALYSIS
+    # ==================================
+
+    if "LOT" in df.columns:
+
+        st.subheader("📦 LOT Analysis")
+
+        selected_lot = st.selectbox(
+            "Select LOT",
+            sorted(df["LOT"].dropna().unique())
+        )
+
+        lot_data = df[
+            df["LOT"] == selected_lot
+        ]
+
+        st.dataframe(
+            lot_data,
+            use_container_width=True
+        )
+
+    # ==================================
+    # RAW DATA
+    # ==================================
+
+    st.subheader("📋 Raw Data")
 
     st.dataframe(
-        ranking,
+        df,
         use_container_width=True
     )

@@ -318,3 +318,74 @@ Neps : {worst['NEPS']:.0f}
         df,
         use_container_width=True
     )
+    # ==================================
+# FILTERS
+# ==================================
+
+st.sidebar.header("🎯 Filters")
+
+# LOT
+
+if "LOT" in df.columns:
+
+    lots = st.sidebar.multiselect(
+        "LOT",
+        sorted(df["LOT"].dropna().unique())
+    )
+
+    if lots:
+
+        df = df[df["LOT"].isin(lots)]
+
+# BLEND
+
+if "BLEND" in df.columns:
+
+    blends = st.sidebar.multiselect(
+        "Blend",
+        sorted(df["BLEND"].dropna().unique())
+    )
+
+    if blends:
+
+        df = df[df["BLEND"].isin(blends)]
+
+# MACHINE
+
+if "M.C" in df.columns:
+
+    machines = st.sidebar.multiselect(
+        "Machine",
+        sorted(df["M.C"].dropna().unique())
+    )
+
+    if machines:
+
+        df = df[df["M.C"].isin(machines)]
+
+# COUNT
+
+if "COUNT" in df.columns:
+
+    counts = st.sidebar.multiselect(
+        "Count",
+        sorted(df["COUNT"].dropna().unique())
+    )
+
+    if counts:
+
+        df = df[df["COUNT"].isin(counts)]
+
+# PRODUCT
+
+if "Product" in df.columns:
+
+    products = st.sidebar.multiselect(
+        "Product",
+        sorted(df["Product"].dropna().unique())
+    )
+
+    if products:
+
+        df = df[df["Product"].isin(products)]
+

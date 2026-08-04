@@ -11,4 +11,3 @@ st.title("🧵 Quality Control System")
 st.subheader("مرحلة الكارد")
 
 st.success("System Running Successfully ✅")
-`

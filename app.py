@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 
+# =====================================
+# PAGE CONFIG
+# =====================================
+
 st.set_page_config(
     page_title="BeLYarn Quality Control",
     page_icon="🧵",
@@ -8,6 +12,10 @@ st.set_page_config(
 )
 
 st.title("🧵 BeLYarn Quality Control")
+
+# =====================================
+# FILE UPLOAD
+# =====================================
 
 uploaded_file = st.file_uploader(
     "Upload Weekly Report",
@@ -30,63 +38,9 @@ if uploaded_file:
 
     df.columns = df.columns.str.strip()
 
-    # =========================
-    # FILTERS
-    # =========================
-
-    st.sidebar.header("🎯 Filters")
-
-    if "Product" in df.columns:
-
-        product = st.sidebar.selectbox(
-            "Product",
-            ["All"] + sorted(
-                df["Product"].dropna().unique().tolist()
-            )
-        )
-
-        if product != "All":
-            df = df[df["Product"] == product]
-
-    if "M.C" in df.columns:
-
-        machine = st.sidebar.selectbox(
-            "Machine",
-            ["All"] + sorted(
-                df["M.C"].dropna().unique().tolist()
-            )
-        )
-
-        if machine != "All":
-            df = df[df["M.C"] == machine]
-
-    if "LOT" in df.columns:
-
-        lot = st.sidebar.selectbox(
-            "LOT",
-            ["All"] + sorted(
-                df["LOT"].dropna().unique().tolist()
-            )
-        )
-
-        if lot != "All":
-            df = df[df["LOT"] == lot]
-
-    if "BLEND" in df.columns:
-
-        blend = st.sidebar.selectbox(
-            "Blend",
-            ["All"] + sorted(
-                df["BLEND"].dropna().unique().tolist()
-            )
-        )
-
-        if blend != "All":
-            df = df[df["BLEND"] == blend]
-
-    # =========================
+    # =====================================
     # CLEAN DATA
-    # =========================
+    # =====================================
 
     if "NEPS" in df.columns:
 
@@ -94,6 +48,8 @@ if uploaded_file:
             df["NEPS"],
             errors="coerce"
         )
+
+        # صفر = لم يتم التحليل
 
         df["NEPS"] = df["NEPS"].replace(
             0,
@@ -112,23 +68,81 @@ if uploaded_file:
             pd.NA
         )
 
-        temp = df["NER%"].dropna()
+        valid = df["NER%"].dropna()
 
-        if len(temp) > 0:
+        if len(valid) > 0:
 
-            if temp.max() <= 1:
+            if valid.max() <= 1:
 
                 df["NER%"] = df["NER%"] * 100
 
-    # =========================
-    # PAGE HEADER
-    # =========================
+    # =====================================
+    # FILTERS
+    # =====================================
+
+    st.sidebar.header("🎯 Filters")
+
+    if "Product" in df.columns:
+
+        product = st.sidebar.selectbox(
+            "Product",
+            ["All"] + sorted(
+                df["Product"].dropna().unique().tolist()
+            )
+        )
+
+        if product != "All":
+
+            df = df[df["Product"] == product]
+
+    if "M.C" in df.columns:
+
+        machine = st.sidebar.selectbox(
+            "Machine",
+            ["All"] + sorted(
+                df["M.C"].dropna().unique().tolist()
+            )
+        )
+
+        if machine != "All":
+
+            df = df[df["M.C"] == machine]
+
+    if "LOT" in df.columns:
+
+        lot = st.sidebar.selectbox(
+            "LOT",
+            ["All"] + sorted(
+                df["LOT"].dropna().unique().tolist()
+            )
+        )
+
+        if lot != "All":
+
+            df = df[df["LOT"] == lot]
+
+    if "BLEND" in df.columns:
+
+        blend = st.sidebar.selectbox(
+            "Blend",
+            ["All"] + sorted(
+                df["BLEND"].dropna().unique().tolist()
+            )
+        )
+
+        if blend != "All":
+
+            df = df[df["BLEND"] == blend]
+
+    # =====================================
+    # TITLE
+    # =====================================
 
     st.header(f"📊 {stage}")
 
-    # =========================
+    # =====================================
     # KPI
-    # =========================
+    # =====================================
 
     c1, c2, c3, c4 = st.columns(4)
 
@@ -181,9 +195,114 @@ if uploaded_file:
             f"{df['RKM'].mean():.2f}"
         )
 
-    # =========================
-    # DATA
-    # =========================
+    # =====================================
+    # QUALITY SCORE
+    # =====================================
+
+    if "NEPS" in df.columns:
+
+        quality_score = 100 - df["NEPS"].dropna().mean()
+
+        quality_score = max(
+            0,
+            min(
+                100,
+                quality_score
+            )
+        )
+
+        st.metric(
+            "🏭 Quality Score",
+            f"{quality_score:.1f}"
+        )
+
+    # =====================================
+    # BEST / WORST
+    # =====================================
+
+    if "NEPS" in df.columns:
+
+        temp = df.dropna(
+            subset=["NEPS"]
+        )
+
+        if len(temp) > 0:
+
+            if "Product" in temp.columns:
+
+                best = temp.loc[
+                    temp["NEPS"].idxmin()
+                ]
+
+                worst = temp.loc[
+                    temp["NEPS"].idxmax()
+                ]
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+
+                    st.success(
+                        f"""
+🏆 Best Product
+
+{best['Product']}
+
+NEPS = {best['NEPS']:.0f}
+"""
+                    )
+
+                with col2:
+
+                    st.error(
+                        f"""
+🔻 Worst Product
+
+{worst['Product']}
+
+NEPS = {worst['NEPS']:.0f}
+"""
+                    )
+
+            elif "M.C" in temp.columns:
+
+                best = temp.loc[
+                    temp["NEPS"].idxmin()
+                ]
+
+                worst = temp.loc[
+                    temp["NEPS"].idxmax()
+                ]
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+
+                    st.success(
+                        f"""
+🏆 Best Machine
+
+{best['M.C']}
+
+NEPS = {best['NEPS']:.0f}
+"""
+                    )
+
+                with col2:
+
+                    st.error(
+                        f"""
+🔻 Worst Machine
+
+{worst['M.C']}
+
+NEPS = {worst['NEPS']:.0f}
+"""
+                    )
+
+    # =====================================
+    # DATA TABLE
+    # =====================================
 
     st.subheader("📋 Data Preview")
 

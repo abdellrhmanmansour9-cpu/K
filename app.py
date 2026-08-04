@@ -8,25 +8,56 @@ st.set_page_config(
 
 st.title("🧵 Quality Control System")
 
-st.subheader("Quality Control Login")
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-username = st.text_input(
-    "Username"
-)
+# ==================================
+# LOGIN
+# ==================================
 
-password = st.text_input(
-    "Password",
-    type="password"
-)
+if not st.session_state.logged_in:
 
-if st.button("Login"):
+    st.subheader("Quality Control Login")
 
-    if username == "admin" and password == "1234":
+    username = st.text_input("Username")
 
-        st.success("Login Successfully ✅")
+    password = st.text_input(
+        "Password",
+        type="password"
+    )
 
-    else:
+    if st.button("Login"):
 
-        st.error(
-            "Wrong Username Or Password"
-        )
+        if username == "admin" and password == "1234":
+
+            st.session_state.logged_in = True
+
+            st.rerun()
+
+        else:
+
+            st.error(
+                "Wrong Username Or Password"
+            )
+
+# ==================================
+# MAIN SYSTEM
+# ==================================
+
+else:
+
+    st.success(
+        "Welcome To Quality Control System ✅"
+    )
+
+    st.header("🧵 Carding Department")
+
+    st.write(
+        "مرحلة الكارد"
+    )
+
+    if st.button("Logout"):
+
+        st.session_state.logged_in = False
+
+        st.rerun()

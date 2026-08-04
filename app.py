@@ -8,6 +8,25 @@ st.set_page_config(
 
 st.title("🧵 Quality Control System")
 
-st.subheader("مرحلة الكارد")
+st.subheader("Quality Control Login")
 
-st.success("System Running Successfully ✅")
+username = st.text_input(
+    "Username"
+)
+
+password = st.text_input(
+    "Password",
+    type="password"
+)
+
+if st.button("Login"):
+
+    if username == "admin" and password == "1234":
+
+        st.success("Login Successfully ✅")
+
+    else:
+
+        st.error(
+            "Wrong Username Or Password"
+        )

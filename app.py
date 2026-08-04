@@ -30,6 +30,100 @@ if uploaded_file:
 
     df.columns = df.columns.str.strip()
 
+    # =========================
+    # FILTERS
+    # =========================
+
+    st.sidebar.header("🎯 Filters")
+
+    if "Product" in df.columns:
+
+        product = st.sidebar.selectbox(
+            "Product",
+            ["All"] + sorted(
+                df["Product"].dropna().unique().tolist()
+            )
+        )
+
+        if product != "All":
+            df = df[df["Product"] == product]
+
+    if "M.C" in df.columns:
+
+        machine = st.sidebar.selectbox(
+            "Machine",
+            ["All"] + sorted(
+                df["M.C"].dropna().unique().tolist()
+            )
+        )
+
+        if machine != "All":
+            df = df[df["M.C"] == machine]
+
+    if "LOT" in df.columns:
+
+        lot = st.sidebar.selectbox(
+            "LOT",
+            ["All"] + sorted(
+                df["LOT"].dropna().unique().tolist()
+            )
+        )
+
+        if lot != "All":
+            df = df[df["LOT"] == lot]
+
+    if "BLEND" in df.columns:
+
+        blend = st.sidebar.selectbox(
+            "Blend",
+            ["All"] + sorted(
+                df["BLEND"].dropna().unique().tolist()
+            )
+        )
+
+        if blend != "All":
+            df = df[df["BLEND"] == blend]
+
+    # =========================
+    # CLEAN DATA
+    # =========================
+
+    if "NEPS" in df.columns:
+
+        df["NEPS"] = pd.to_numeric(
+            df["NEPS"],
+            errors="coerce"
+        )
+
+        df["NEPS"] = df["NEPS"].replace(
+            0,
+            pd.NA
+        )
+
+    if "NER%" in df.columns:
+
+        df["NER%"] = pd.to_numeric(
+            df["NER%"],
+            errors="coerce"
+        )
+
+        df["NER%"] = df["NER%"].replace(
+            0,
+            pd.NA
+        )
+
+        temp = df["NER%"].dropna()
+
+        if len(temp) > 0:
+
+            if temp.max() <= 1:
+
+                df["NER%"] = df["NER%"] * 100
+
+    # =========================
+    # PAGE HEADER
+    # =========================
+
     st.header(f"📊 {stage}")
 
     # =========================
@@ -68,26 +162,16 @@ if uploaded_file:
 
     if "NEPS" in df.columns:
 
-        temp_neps = df["NEPS"].replace(0, pd.NA)
-
         c3.metric(
             "Average Neps",
-            f"{temp_neps.dropna().mean():.0f}"
+            f"{df['NEPS'].dropna().mean():.0f}"
         )
 
     if "NER%" in df.columns:
 
-        temp_ner = df["NER%"].replace(0, pd.NA)
-
-        if len(temp_ner.dropna()) > 0:
-
-            if temp_ner.dropna().max() <= 1:
-
-                temp_ner = temp_ner * 100
-
         c4.metric(
             "Average NER%",
-            f"{temp_ner.dropna().mean():.1f}%"
+            f"{df['NER%'].dropna().mean():.1f}%"
         )
 
     elif "RKM" in df.columns:
@@ -98,7 +182,7 @@ if uploaded_file:
         )
 
     # =========================
-    # DATA PREVIEW
+    # DATA
     # =========================
 
     st.subheader("📋 Data Preview")

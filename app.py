@@ -1,9 +1,7 @@
 import streamlit as st
 import pandas as pd
-
-# =====================================
-# PAGE CONFIG
-# =====================================
+import plotly.express as px
+import plotly.graph_objects as go
 
 st.set_page_config(
     page_title="BeLYarn Quality Control",
@@ -11,11 +9,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧵 BeLYarn Quality Control")
-
-# =====================================
-# FILE UPLOAD
-# =====================================
+st.title("🧵 BeLYarn Quality Control Dashboard")
 
 uploaded_file = st.file_uploader(
     "Upload Weekly Report",
@@ -38,31 +32,25 @@ if uploaded_file:
 
     df.columns = df.columns.str.strip()
 
-    # =====================================
+    # =====================
     # CLEAN DATA
-    # =====================================
+    # =====================
 
     if "NEPS" in df.columns:
-
         df["NEPS"] = pd.to_numeric(
             df["NEPS"],
             errors="coerce"
         )
-
-        # صفر = لم يتم التحليل
-
         df["NEPS"] = df["NEPS"].replace(
             0,
             pd.NA
         )
 
     if "NER%" in df.columns:
-
         df["NER%"] = pd.to_numeric(
             df["NER%"],
             errors="coerce"
         )
-
         df["NER%"] = df["NER%"].replace(
             0,
             pd.NA
@@ -70,15 +58,12 @@ if uploaded_file:
 
         valid = df["NER%"].dropna()
 
-        if len(valid) > 0:
+        if len(valid) > 0 and valid.max() <= 1:
+            df["NER%"] = df["NER%"] * 100
 
-            if valid.max() <= 1:
-
-                df["NER%"] = df["NER%"] * 100
-
-    # =====================================
+    # =====================
     # FILTERS
-    # =====================================
+    # =====================
 
     st.sidebar.header("🎯 Filters")
 
@@ -86,96 +71,107 @@ if uploaded_file:
 
         product = st.sidebar.selectbox(
             "Product",
-            ["All"] + sorted(
-                df["Product"].dropna().unique().tolist()
+            ["All"] +
+            sorted(
+                df["Product"]
+                .dropna()
+                .unique()
+                .tolist()
             )
         )
 
         if product != "All":
-
-            df = df[df["Product"] == product]
+            df = df[
+                df["Product"] == product
+            ]
 
     if "M.C" in df.columns:
 
         machine = st.sidebar.selectbox(
             "Machine",
-            ["All"] + sorted(
-                df["M.C"].dropna().unique().tolist()
+            ["All"] +
+            sorted(
+                df["M.C"]
+                .dropna()
+                .unique()
+                .tolist()
             )
         )
 
         if machine != "All":
-
-            df = df[df["M.C"] == machine]
+            df = df[
+                df["M.C"] == machine
+            ]
 
     if "LOT" in df.columns:
 
         lot = st.sidebar.selectbox(
             "LOT",
-            ["All"] + sorted(
-                df["LOT"].dropna().unique().tolist()
+            ["All"] +
+            sorted(
+                df["LOT"]
+                .dropna()
+                .unique()
+                .tolist()
             )
         )
 
         if lot != "All":
-
-            df = df[df["LOT"] == lot]
+            df = df[
+                df["LOT"] == lot
+            ]
 
     if "BLEND" in df.columns:
 
         blend = st.sidebar.selectbox(
             "Blend",
-            ["All"] + sorted(
-                df["BLEND"].dropna().unique().tolist()
+            ["All"] +
+            sorted(
+                df["BLEND"]
+                .dropna()
+                .unique()
+                .tolist()
             )
         )
 
         if blend != "All":
-
-            df = df[df["BLEND"] == blend]
-
-    # =====================================
-    # TITLE
-    # =====================================
+            df = df[
+                df["BLEND"] == blend
+            ]
 
     st.header(f"📊 {stage}")
 
-    # =====================================
+    # =====================
     # KPI
-    # =====================================
+    # =====================
 
     c1, c2, c3, c4 = st.columns(4)
 
     if "COUNT" in df.columns:
-
         c1.metric(
             "Average Count",
             f"{df['COUNT'].mean():.2f}"
         )
 
     elif "Act.Count" in df.columns:
-
         c1.metric(
             "Average Count",
             f"{df['Act.Count'].mean():.2f}"
         )
 
     if "C.V" in df.columns:
-
         c2.metric(
             "Average CV",
             f"{df['C.V'].mean():.2f}"
         )
 
     elif "C.V m" in df.columns:
-
         c2.metric(
             "Average CVm",
             f"{df['C.V m'].mean():.2f}"
         )
 
     if "NEPS" in df.columns:
-
         c3.metric(
             "Average Neps",
             f"{df['NEPS'].dropna().mean():.0f}"
@@ -195,30 +191,60 @@ if uploaded_file:
             f"{df['RKM'].mean():.2f}"
         )
 
-    # =====================================
-    # QUALITY SCORE
-    # =====================================
+    # =====================
+    # QUALITY GAUGE
+    # =====================
 
     if "NEPS" in df.columns:
 
-        quality_score = 100 - df["NEPS"].dropna().mean()
-
-        quality_score = max(
+        score = max(
             0,
             min(
                 100,
-                quality_score
+                100 - df["NEPS"]
+                .dropna()
+                .mean()
             )
         )
 
-        st.metric(
-            "🏭 Quality Score",
-            f"{quality_score:.1f}"
+        fig_gauge = go.Figure(
+            go.Indicator(
+                mode="gauge+number",
+                value=score,
+                title={
+                    "text":
+                    "Quality Score"
+                },
+                gauge={
+                    "axis": {
+                        "range":[0,100]
+                    },
+                    "steps":[
+                        {
+                            "range":[0,50],
+                            "color":"red"
+                        },
+                        {
+                            "range":[50,75],
+                            "color":"orange"
+                        },
+                        {
+                            "range":[75,100],
+                            "color":"green"
+                        }
+                    ]
+                }
+            )
         )
 
-    # =====================================
-    # BEST / WORST
-    # =====================================
+        st.plotly_chart(
+            fig_gauge,
+            use_container_width=True
+        )
+
+    # =====================
+    # BEST & WORST
+    # =====================
 
     if "NEPS" in df.columns:
 
@@ -228,85 +254,154 @@ if uploaded_file:
 
         if len(temp) > 0:
 
-            if "Product" in temp.columns:
+            best = temp.loc[
+                temp["NEPS"].idxmin()
+            ]
 
-                best = temp.loc[
-                    temp["NEPS"].idxmin()
-                ]
+            worst = temp.loc[
+                temp["NEPS"].idxmax()
+            ]
 
-                worst = temp.loc[
-                    temp["NEPS"].idxmax()
-                ]
+            col1, col2 = st.columns(2)
 
-                col1, col2 = st.columns(2)
+            label = (
+                "Product"
+                if "Product"
+                in temp.columns
+                else "M.C"
+            )
 
-                with col1:
+            with col1:
 
-                    st.success(
-                        f"""
-🏆 Best Product
+                st.success(
+                    f"""
+🏆 Best
 
-{best['Product']}
-
-NEPS = {best['NEPS']:.0f}
-"""
-                    )
-
-                with col2:
-
-                    st.error(
-                        f"""
-🔻 Worst Product
-
-{worst['Product']}
-
-NEPS = {worst['NEPS']:.0f}
-"""
-                    )
-
-            elif "M.C" in temp.columns:
-
-                best = temp.loc[
-                    temp["NEPS"].idxmin()
-                ]
-
-                worst = temp.loc[
-                    temp["NEPS"].idxmax()
-                ]
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-
-                    st.success(
-                        f"""
-🏆 Best Machine
-
-{best['M.C']}
+{best[label]}
 
 NEPS = {best['NEPS']:.0f}
 """
-                    )
+                )
 
-                with col2:
+            with col2:
 
-                    st.error(
-                        f"""
-🔻 Worst Machine
+                st.error(
+                    f"""
+🔻 Worst
 
-{worst['M.C']}
+{worst[label]}
 
 NEPS = {worst['NEPS']:.0f}
 """
-                    )
+                )
 
-    # =====================================
-    # DATA TABLE
-    # =====================================
+    # =====================
+    # CHARTS
+    # =====================
 
-    st.subheader("📋 Data Preview")
+    if "M.C" in df.columns and "C.V" in df.columns:
 
-    st.dataframe(
-        df,
-        use_container_width=True
-    )
+        st.subheader("📈 CV By Machine")
+
+        fig_cv = px.bar(
+            df,
+            x="M.C",
+            y="C.V",
+            color="C.V"
+        )
+
+        st.plotly_chart(
+            fig_cv,
+            use_container_width=True
+        )
+
+    if "M.C" in df.columns and "NEPS" in df.columns:
+
+        st.subheader("📈 Neps By Machine")
+
+        fig_neps = px.bar(
+            df,
+            x="M.C",
+            y="NEPS",
+            color="NEPS"
+        )
+
+        st.plotly_chart(
+            fig_neps,
+            use_container_width=True
+        )
+
+    if "Product" in df.columns and "C.V m" in df.columns:
+
+        st.subheader("📈 CVm By Product")
+
+        fig_cvm = px.bar(
+            df,
+            x="Product",
+            y="C.V m",
+            color="C.V m"
+        )
+
+        st.plotly_chart(
+            fig_cvm,
+            use_container_width=True
+        )
+
+    if "Product" in df.columns and "IPI" in df.columns:
+
+        st.subheader("📈 IPI By Product")
+
+        fig_ipi = px.bar(
+            df,
+            x="Product",
+            y="IPI",
+            color="IPI"
+        )
+
+        st.plotly_chart(
+            fig_ipi,
+            use_container_width=True
+        )
+
+    # =====================
+    # PIVOT TABLE
+    # =====================
+
+    if "BLEND" in df.columns:
+
+        st.subheader(
+            "📊 Blend Analysis"
+        )
+
+        pivot = pd.pivot_table(
+            df,
+            values=[
+                c for c in df.columns
+                if c not in [
+                    "LOT",
+                    "BLEND",
+                    "M.C",
+                    "Product"
+                ]
+            ],
+            index="BLEND",
+            aggfunc="mean"
+        )
+
+        st.dataframe(
+            pivot,
+            use_container_width=True
+        )
+
+    # =====================
+    # RAW DATA
+    # =====================
+
+    with st.expander(
+        "📋 View Raw Data"
+    ):
+
+        st.dataframe(
+            df,
+            use_container_width=True
+        )

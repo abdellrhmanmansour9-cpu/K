@@ -30,7 +30,7 @@ if uploaded_file:
 
     df.columns = df.columns.str.strip()
 
-    # Ignore NEPS = 0
+    # تجاهل النبس = 0
 
     if "NEPS" in df.columns:
 
@@ -44,127 +44,50 @@ if uploaded_file:
             pd.NA
         )
 
-    st.header(f"📊 {stage}")
+    # فلتر منتج
 
-    # KPI
+    if "Product" in df.columns:
 
-    c1, c2, c3, c4 = st.columns(4)
-
-    if "COUNT" in df.columns:
-
-        c1.metric(
-            "Average Count",
-            round(df["COUNT"].mean(), 2)
+        product = st.sidebar.selectbox(
+            "Select Product",
+            ["All"] +
+            sorted(
+                df["Product"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
         )
 
-    elif "Act.Count" in df.columns:
+        if product != "All":
 
-        c1.metric(
-            "Average Count",
-            round(df["Act.Count"].mean(), 2)
-        )
-
-    if "C.V" in df.columns:
-
-        c2.metric(
-            "Average CV",
-            round(df["C.V"].mean(), 2)
-        )
-
-    elif "C.V m" in df.columns:
-
-        c2.metric(
-            "Average CVm",
-            round(df["C.V m"].mean(), 2)
-        )
-
-    if "NEPS" in df.columns:
-
-        c3.metric(
-            "Average Neps",
-            round(df["NEPS"].dropna().mean(), 0)
-        )
-
-    if "RKM" in df.columns:
-
-        c4.metric(
-            "Average RKM",
-            round(df["RKM"].mean(), 2)
-        )
-
-    # Best & Worst
-
-    if "NEPS" in df.columns:
-
-        temp = df.dropna(
-            subset=["NEPS"]
-        )
-
-        if len(temp) > 0:
-
-            best = temp.loc[
-                temp["NEPS"].idxmin()
+            df = df[
+                df["Product"] == product
             ]
 
-            worst = temp.loc[
-                temp["NEPS"].idxmax()
+    # فلتر ماكينة
+
+    if "M.C" in df.columns:
+
+        machine = st.sidebar.selectbox(
+            "Select Machine",
+            ["All"] +
+            sorted(
+                df["M.C"]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+        )
+
+        if machine != "All":
+
+            df = df[
+                df["M.C"].astype(str) == machine
             ]
 
-            col1, col2 = st.columns(2)
-
-            if "M.C" in temp.columns:
-
-                with col1:
-
-                    st.success(
-                        f"""
-🏆 Best Machine
-
-{best['M.C']}
-
-Neps = {best['NEPS']}
-"""
-                    )
-
-                with col2:
-
-                    st.error(
-                        f"""
-🔻 Worst Machine
-
-{worst['M.C']}
-
-Neps = {worst['NEPS']}
-"""
-                    )
-
-            elif "Product" in temp.columns:
-
-                with col1:
-
-                    st.success(
-                        f"""
-🏆 Best Product
-
-{best['Product']}
-
-Neps = {best['NEPS']}
-"""
-                    )
-
-                with col2:
-
-                    st.error(
-                        f"""
-🔻 Worst Product
-
-{worst['Product']}
-
-Neps = {worst['NEPS']}
-"""
-                    )
-
-    st.subheader("📋 Data Preview")
+    st.header(stage)
 
     st.dataframe(
         df,

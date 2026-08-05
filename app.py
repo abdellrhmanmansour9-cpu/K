@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 st.set_page_config(
     page_title="BelYarn Quality Intelligence Platform",
@@ -30,8 +31,6 @@ if uploaded_file:
 
     df.columns = df.columns.str.strip()
 
-    # تجاهل النبس = 0
-
     if "NEPS" in df.columns:
 
         df["NEPS"] = pd.to_numeric(
@@ -44,12 +43,14 @@ if uploaded_file:
             pd.NA
         )
 
-    # فلتر منتج
+    # =====================
+    # FILTERS
+    # =====================
 
     if "Product" in df.columns:
 
         product = st.sidebar.selectbox(
-            "Select Product",
+            "Product",
             ["All"] +
             sorted(
                 df["Product"]
@@ -65,16 +66,13 @@ if uploaded_file:
                 df["Product"] == product
             ]
 
-    # فلتر ماكينة
-
     if "M.C" in df.columns:
 
         machine = st.sidebar.selectbox(
-            "Select Machine",
+            "Machine",
             ["All"] +
             sorted(
                 df["M.C"]
-                .dropna()
                 .astype(str)
                 .unique()
                 .tolist()
@@ -84,12 +82,189 @@ if uploaded_file:
         if machine != "All":
 
             df = df[
-                df["M.C"].astype(str) == machine
+                df["M.C"].astype(str)
+                == machine
             ]
 
-    st.header(stage)
+    if "LOT" in df.columns:
 
-    st.dataframe(
-        df,
-        use_container_width=True
-    )
+        lot = st.sidebar.selectbox(
+            "LOT",
+            ["All"] +
+            sorted(
+                df["LOT"]
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+        )
+
+        if lot != "All":
+
+            df = df[
+                df["LOT"].astype(str)
+                == lot
+            ]
+
+    if "BLEND" in df.columns:
+
+        blend = st.sidebar.selectbox(
+            "Blend",
+            ["All"] +
+            sorted(
+                df["BLEND"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
+        )
+
+        if blend != "All":
+
+            df = df[
+                df["BLEND"] == blend
+            ]
+
+    st.header(f"📊 {stage}")
+
+    # =====================
+    # KPI
+    # =====================
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Records", len(df))
+
+    if "COUNT" in df.columns:
+
+        c2.metric(
+            "Count Avg",
+            round(df["COUNT"].mean(), 2)
+        )
+
+    elif "Act.Count" in df.columns:
+
+        c2.metric(
+            "Count Avg",
+            round(df["Act.Count"].mean(), 2)
+        )
+
+    if "C.V" in df.columns:
+
+        c3.metric(
+            "CV Avg",
+            round(df["C.V"].mean(), 2)
+        )
+
+    elif "C.V m" in df.columns:
+
+        c3.metric(
+            "CVm Avg",
+            round(df["C.V m"].mean(), 2)
+        )
+
+    if "NEPS" in df.columns:
+
+        c4.metric(
+            "Neps Avg",
+            round(
+                df["NEPS"]
+                .dropna()
+                .mean(),
+                0
+            )
+        )
+
+    # =====================
+    # CHART 1
+    # =====================
+
+    if (
+        "M.C" in df.columns
+        and
+        "C.V" in df.columns
+    ):
+
+        st.subheader(
+            "📈 CV By Machine"
+        )
+
+        fig = px.bar(
+            df,
+            x="M.C",
+            y="C.V",
+            color="C.V",
+            text_auto=".2f"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    # =====================
+    # CHART 2
+    # =====================
+
+    if (
+        "M.C" in df.columns
+        and
+        "NEPS" in df.columns
+    ):
+
+        st.subheader(
+            "📈 Neps By Machine"
+        )
+
+        fig = px.bar(
+            df,
+            x="M.C",
+            y="NEPS",
+            color="NEPS",
+            text_auto=".0f"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    # =====================
+    # WINDING CHART
+    # =====================
+
+    if (
+        "Product" in df.columns
+        and
+        "C.V m" in df.columns
+    ):
+
+        st.subheader(
+            "📈 CVm By Product"
+        )
+
+        fig = px.bar(
+            df,
+            x="Product",
+            y="C.V m",
+            color="C.V m",
+            text_auto=".2f"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    # =====================
+    # TABLE
+    # =====================
+
+    with st.expander(
+        "📋 View Data"
+    ):
+
+        st.dataframe(
+            df,
+            use_container_width=True
+        )

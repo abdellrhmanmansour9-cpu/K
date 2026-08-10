@@ -1,253 +1,289 @@
-import streamlit as st
-import pandas as pd
-import plotly.express as px
+Create a professional textile quality intelligence platform for BelYarn.
 
-# =====================================================
-# PAGE CONFIG
-# =====================================================
+Data Source:
+Excel workbook with multiple sheets.
 
-st.set_page_config(
-    page_title="BelYarn Quality Intelligence Platform",
-    page_icon="🧵",
-    layout="wide"
-)
+Sheets:
 
-st.title("🧵 BelYarn Quality Intelligence Platform")
+Card U1
+Card U2
+Breaker U1
+Breaker U2
+Finisher U1
+Finisher U2
+Comber U1
+Comber U2
+Roving U1
+Roving U2
+Winding U1
+Winding U2
 
-# =====================================================
-# UPLOAD FILE
-# =====================================================
+Global Filters:
 
-uploaded_file = st.file_uploader(
-    "Upload Quality Report",
-    type=["xlsx"]
-)
+LOT
+BLEND
+Product
+Machine
 
-if uploaded_file:
+Factory Overview Page:
 
-    excel_file = pd.ExcelFile(uploaded_file)
+Show:
 
-    page = st.sidebar.selectbox(
-        "Select Stage",
-        excel_file.sheet_names
-    )
+Total Records
+Total Lots
+Total Blends
+Total Products
 
-    df = pd.read_excel(uploaded_file, sheet_name=page)
+Quality Score
 
-    # =====================================================
-    # CLEAN COLUMN NAMES
-    # =====================================================
+Best Blend
 
-    df.columns = (
-        df.columns
-        .astype(str)
-        .str.strip()
-    )
+Worst Blend
 
-    # =====================================================
-    # NUMERIC COLUMNS
-    # =====================================================
+Best Production Unit
 
-    numeric_cols = [
-        "Act.Count",
-        "Count",
-        "C.V",
-        "CV",
-        "CVm",
-        "C.V m",
-        "THIN",
-        "THICK",
-        "NEPS",
-        "IPI",
-        "H",
-        "RKM",
-        "ELG",
-        "Bforce",
-        "Twist"
-    ]
+Worst Production Unit
 
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(
-                df[col],
-                errors="coerce"
-            )
+Card Dashboard:
 
-    # =====================================================
-    # FILTERS
-    # =====================================================
+Columns:
 
-    st.sidebar.header("Filters")
+M.C
+LOT
+COUNT
+C.V
+NEPS
+NER%
+BLEND
 
-    if "Product" in df.columns:
+KPIs:
 
-        product = st.sidebar.selectbox(
-            "Product",
-            ["All"] +
-            sorted(
-                df["Product"]
-                .dropna()
-                .astype(str)
-                .unique()
-            )
-        )
+Average CV
+Average NEPS
+Average Efficiency
 
-        if product != "All":
-            df = df[df["Product"].astype(str) == product]
+Charts:
 
-    if "LOT" in df.columns:
+CV By Machine
 
-        lot = st.sidebar.selectbox(
-            "LOT",
-            ["All"] +
-            sorted(
-                df["LOT"]
-                .dropna()
-                .astype(str)
-                .unique()
-            )
-        )
+NEPS By Machine
 
-        if lot != "All":
-            df = df[df["LOT"].astype(str) == lot]
+Efficiency By Machine
 
-    if "BLEND" in df.columns:
+CV By Blend
 
-        blend = st.sidebar.selectbox(
-            "Blend",
-            ["All"] +
-            sorted(
-                df["BLEND"]
-                .dropna()
-                .astype(str)
-                .unique()
-            )
-        )
+NEPS By Blend
 
-        if blend != "All":
-            df = df[df["BLEND"].astype(str) == blend]
+Efficiency By Blend
 
-    st.header(page)
+Top 5 Machines
 
-    # =====================================================
-    # KPI SECTION
-    # =====================================================
+Worst 5 Machines
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+Pareto NEPS Analysis
 
-    c1.metric("Records", len(df))
+Breaker Dashboard:
 
-    if "Product" in df.columns:
-        c2.metric(
-            "Products",
-            df["Product"].nunique()
-        )
+Columns:
 
-    if "LOT" in df.columns:
-        c3.metric(
-            "Lots",
-            df["LOT"].nunique()
-        )
+M.C
+LOT
+COUNT
+C.V
+NEPS
+BLEND
 
-    if "C.V m" in df.columns:
-        c4.metric(
-            "Avg CVm",
-            round(df["C.V m"].mean(), 2)
-        )
+KPIs:
 
-    if "IPI" in df.columns:
-        c5.metric(
-            "Avg IPI",
-            round(df["IPI"].mean(), 1)
-        )
+Average CV
+Average NEPS
 
-    if "RKM" in df.columns:
-        c6.metric(
-            "Avg RKM",
-            round(df["RKM"].mean(), 1)
-        )
+Charts:
 
-    # =====================================================
-    # PRODUCT ANALYSIS
-    # =====================================================
+CV By Machine
 
-    if "Product" in df.columns:
+NEPS By Machine
 
-        st.subheader("Product Distribution")
+CV By Blend
 
-        fig = px.histogram(
-            df,
-            x="Product",
-            color="Product"
-        )
+NEPS By Blend
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+Count Variation
 
-    # =====================================================
-    # CVM
-    # =====================================================
+Finisher Dashboard:
 
-    if (
-        "Product" in df.columns and
-        "C.V m" in df.columns
-    ):
+Columns:
 
-        st.subheader("CVm By Product")
+M.C
+LOT
+COUNT
+C.V
+NEPS
+BLEND
 
-        chart = (
-            df.groupby(
-                "Product",
-                as_index=False
-            )["C.V m"]
-            .mean()
-        )
+KPIs:
 
-        fig = px.bar(
-            chart,
-            x="Product",
-            y="C.V m",
-            color="C.V m",
-            text_auto=".2f"
-        )
+Average CV
+Average NEPS
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+Charts:
 
-    # =====================================================
-    # RKM
-    # =====================================================
+CV By Machine
 
-    if (
-        "Product" in df.columns and
-        "RKM" in df.columns
-    ):
+NEPS By Machine
 
-        st.subheader("RKM By Product")
+CV By Blend
 
-        chart = (
-            df.groupby(
-                "Product",
-                as_index=False
-            )["RKM"]
-            .mean()
-        )
+NEPS By Blend
 
-        fig = px.bar(
-            chart,
-            x="Product",
-            y="RKM",
-            color="RKM",
-            text_auto=".2f"
-        )
+Count Variation
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+Comber Dashboard:
 
-    # ======
+Columns:
+
+M.C
+LOT
+COUNT
+C.V
+NOILS
+NEPS
+BLEND
+
+KPIs:
+
+Average CV
+
+Average NOILS
+
+Average NEPS
+
+Charts:
+
+CV By Machine
+
+NOILS By Machine
+
+NEPS By Machine
+
+CV By Blend
+
+NOILS By Blend
+
+NEPS By Blend
+
+Top Machines
+
+Worst Machines
+
+Roving Dashboard:
+
+Columns:
+
+M.C
+LOT
+COUNT
+C.V
+BLEND
+
+KPIs:
+
+Average Count
+
+Average CV
+
+Charts:
+
+CV By Machine
+
+CV By Blend
+
+Count Variation
+
+Machine Comparison
+
+Winding Dashboard:
+
+Columns:
+
+Product
+LOT
+Act.Count
+Twist
+C.V m
+THIN
+THICK
+NEPS
+IPI
+H
+RKM
+ELG
+Bforce
+BLEND
+
+KPIs:
+
+Average CVm
+
+Average NEPS
+
+Average IPI
+
+Average Hairiness
+
+Average RKM
+
+Charts:
+
+RKM By Product
+
+CVm By Product
+
+Hairiness By Product
+
+NEPS By Product
+
+IPI By Product
+
+Count Variation By Product
+
+RKM vs CVm
+
+RKM vs Hairiness
+
+IPI vs Hairiness
+
+Blend Analysis
+
+Cross Stage Analysis:
+
+Compare:
+
+Card U1 vs Card U2
+
+Breaker U1 vs Breaker U2
+
+Finisher U1 vs Finisher U2
+
+Comber U1 vs Comber U2
+
+Roving U1 vs Roving U2
+
+Winding U1 vs Winding U2
+
+Show:
+
+Best Unit
+
+Worst Unit
+
+Best Blend
+
+Worst Blend
+
+Executive Quality Summary
+
+Use modern dark theme.
+Use Plotly charts.
+Use KPI cards.
+Use responsive layout.

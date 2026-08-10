@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+# ==========================================
+# PAGE CONFIG
+# ==========================================
 st.set_page_config(
     page_title="BelYarn Quality Intelligence Platform",
     page_icon="🧵",
@@ -10,6 +13,9 @@ st.set_page_config(
 
 st.title("🧵 BelYarn Quality Intelligence Platform")
 
+# ==========================================
+# FILE UPLOAD
+# ==========================================
 uploaded_file = st.file_uploader(
     "Upload Weekly Report",
     type=["xlsx"]
@@ -17,6 +23,9 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
 
+    # ==========================================
+    # READ EXCEL
+    # ==========================================
     xls = pd.ExcelFile(uploaded_file)
 
     stage = st.sidebar.selectbox(
@@ -29,45 +38,63 @@ if uploaded_file:
         sheet_name=stage
     )
 
-    df.columns = df.columns.str.strip()
+    # ==========================================
+    # CLEAN COLUMNS
+    # ==========================================
+    df.columns = (
+        df.columns
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
-    # تنظيف النبس
+    # ==========================================
+    # NUMERIC CONVERSIONS
+    # ==========================================
+    numeric_cols = [
+        "C.V",
+        "CV",
+        "NEPS",
+        "NER%",
+        "RKM"
+    ]
+
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="coerce"
+            )
+
     if "NEPS" in df.columns:
-
-        df["NEPS"] = pd.to_numeric(
-            df["NEPS"],
-            errors="coerce"
-        )
-
         df["NEPS"] = df["NEPS"].replace(
             0,
             pd.NA
         )
 
-    # =====================
+    # ==========================================
     # FILTERS
-    # =====================
-
+    # ==========================================
     st.sidebar.header("🎯 Filters")
 
     if "M.C" in df.columns:
 
         machine = st.sidebar.selectbox(
             "Machine",
-            ["All"] +
+            ["All"]
+            +
             sorted(
                 df["M.C"]
                 .astype(str)
+                .dropna()
                 .unique()
                 .tolist()
             )
         )
 
         if machine != "All":
-
             df = df[
-                df["M.C"]
-                .astype(str)
+                df["M.C"].astype(str)
                 == machine
             ]
 
@@ -75,20 +102,20 @@ if uploaded_file:
 
         lot = st.sidebar.selectbox(
             "LOT",
-            ["All"] +
+            ["All"]
+            +
             sorted(
                 df["LOT"]
                 .astype(str)
+                .dropna()
                 .unique()
                 .tolist()
             )
         )
 
         if lot != "All":
-
             df = df[
-                df["LOT"]
-                .astype(str)
+                df["LOT"].astype(str)
                 == lot
             ]
 
@@ -96,46 +123,31 @@ if uploaded_file:
 
         blend = st.sidebar.selectbox(
             "Blend",
-            ["All"] +
+            ["All"]
+            +
             sorted(
                 df["BLEND"]
                 .dropna()
+                .astype(str)
                 .unique()
                 .tolist()
             )
         )
 
         if blend != "All":
-
             df = df[
-                df["BLEND"] == blend
+                df["BLEND"].astype(str)
+                == blend
             ]
 
-    if "Product" in df.columns:
-
-        product = st.sidebar.selectbox(
-            "Product",
-            ["All"] +
-            sorted(
-                df["Product"]
-                .dropna()
-                .unique()
-                .tolist()
-            )
-        )
-
-        if product != "All":
-
-            df = df[
-                df["Product"] == product
-            ]
-
+    # ==========================================
+    # HEADER
+    # ==========================================
     st.header(f"📊 {stage}")
 
-    # =====================
+    # ==========================================
     # KPI
-    # =====================
-
+    # ==========================================
     c1, c2, c3, c4 = st.columns(4)
 
     c1.metric(
@@ -144,27 +156,17 @@ if uploaded_file:
     )
 
     if "C.V" in df.columns:
-
         c2.metric(
             "CV Avg",
-            round(
-                df["C.V"].mean(),
-                2
-            )
+            round(df["C.V"].mean(), 2)
         )
-
-    elif "C.V m" in df.columns:
-
+    elif "CV" in df.columns:
         c2.metric(
-            "CVm Avg",
-            round(
-                df["C.V m"].mean(),
-                2
-            )
+            "CV Avg",
+            round(df["CV"].mean(), 2)
         )
 
     if "NEPS" in df.columns:
-
         c3.metric(
             "Neps Avg",
             round(
@@ -176,7 +178,6 @@ if uploaded_file:
         )
 
     if "RKM" in df.columns:
-
         c4.metric(
             "RKM Avg",
             round(
@@ -185,39 +186,48 @@ if uploaded_file:
             )
         )
 
-    # =====================
-    # TOP 5 / WORST 5
-    # =====================
+    # ==========================================
+    # MACHINE RANKING
+    # ==========================================
+    cv_col = None
+
+    if "C.V" in df.columns:
+        cv_col = "C.V"
+    elif "CV" in df.columns:
+        cv_col = "CV"
 
     if (
         "M.C" in df.columns
         and
-        "C.V" in df.columns
+        cv_col is not None
     ):
+
+        agg_dict = {
+            cv_col: "mean"
+        }
+
+        if "NEPS" in df.columns:
+            agg_dict["NEPS"] = "mean"
+
+        if "NER%" in df.columns:
+            agg_dict["NER%"] = "mean"
 
         ranking = (
             df.groupby(
-                ["M.C"],
+                "M.C",
                 as_index=False
             )
-            .agg({
-                "C.V": "mean",
-                **(
-                    {"NEPS": "mean"}
-                    if "NEPS" in df.columns
-                    else {}
-                )
-            })
+            .agg(agg_dict)
         )
 
         top5 = ranking.nsmallest(
             5,
-            "C.V"
+            cv_col
         )
 
         worst5 = ranking.nlargest(
             5,
-            "C.V"
+            cv_col
         )
 
         col1, col2 = st.columns(2)
@@ -244,42 +254,153 @@ if uploaded_file:
                 use_container_width=True
             )
 
-        # =====================
-        # CHART
-        # =====================
-
+        # ==========================================
+        # CV CHART
+        # ==========================================
         st.subheader(
             "📈 Average CV By Machine"
         )
 
-        fig = px.bar(
-            ranking.sort_values(
-                "C.V"
-            ),
+        fig_cv = px.bar(
+            ranking.sort_values(cv_col),
             x="M.C",
-            y="C.V",
+            y=cv_col,
             text_auto=".2f",
-            color="C.V",
+            color=cv_col,
             color_continuous_scale="RdYlGn_r"
         )
 
-        fig.update_layout(
-            height=500
-        )
-
         st.plotly_chart(
-            fig,
+            fig_cv,
             use_container_width=True
         )
 
-    # =====================
-    # RAW DATA
-    # =====================
+        # ==========================================
+        # NEPS CHART
+        # ==========================================
+        if "NEPS" in ranking.columns:
 
+            st.subheader(
+                "🟠 Average Neps By Machine"
+            )
+
+            fig_neps = px.bar(
+                ranking.sort_values(
+                    "NEPS",
+                    ascending=False
+                ),
+                x="M.C",
+                y="NEPS",
+                text_auto=".0f",
+                color="NEPS",
+                color_continuous_scale="Reds"
+            )
+
+            st.plotly_chart(
+                fig_neps,
+                use_container_width=True
+            )
+
+        # ==========================================
+        # EFFICIENCY CHART
+        # ==========================================
+        if "NER%" in ranking.columns:
+
+            st.subheader(
+                "✅ Efficiency % By Machine"
+            )
+
+            fig_eff = px.bar(
+                ranking.sort_values(
+                    "NER%",
+                    ascending=False
+                ),
+                x="M.C",
+                y="NER%",
+                text_auto=".1f",
+                color="NER%",
+                color_continuous_scale="Greens"
+            )
+
+            st.plotly_chart(
+                fig_eff,
+                use_container_width=True
+            )
+
+    # ==========================================
+    # BLEND DISTRIBUTION
+    # ==========================================
+    if "BLEND" in df.columns:
+
+        st.subheader(
+            "🧵 Blend Distribution"
+        )
+
+        blend_chart = (
+            df["BLEND"]
+            .astype(str)
+            .value_counts()
+            .reset_index()
+        )
+
+        blend_chart.columns = [
+            "Blend",
+            "Count"
+        ]
+
+        fig_blend = px.pie(
+            blend_chart,
+            names="Blend",
+            values="Count",
+            hole=0.4
+        )
+
+        st.plotly_chart(
+            fig_blend,
+            use_container_width=True
+        )
+
+    # ==========================================
+    # EFFICIENCY BY BLEND
+    # ==========================================
+    if (
+        "BLEND" in df.columns
+        and
+        "NER%" in df.columns
+    ):
+
+        st.subheader(
+            "📊 Efficiency By Blend"
+        )
+
+        blend_eff = (
+            df.groupby(
+                "BLEND",
+                as_index=False
+            )["NER%"]
+            .mean()
+        )
+
+        fig_blend_eff = px.bar(
+            blend_eff,
+            x="BLEND",
+            y="NER%",
+            text_auto=".1f",
+            color="NER%",
+            color_continuous_scale="Viridis"
+        )
+
+        st.plotly_chart(
+            fig_blend_eff,
+            use_container_width=True
+        )
+
+    # ==========================================
+    # RAW DATA
+    # ==========================================
     with st.expander(
         "📋 Raw Data"
     ):
-
         st.dataframe(
             df,
             use_container_width=True

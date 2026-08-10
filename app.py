@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# ==========================================
+# =====================================================
 # PAGE CONFIG
-# ==========================================
+# =====================================================
+
 st.set_page_config(
     page_title="BelYarn Quality Intelligence Platform",
     page_icon="🧵",
@@ -13,50 +14,56 @@ st.set_page_config(
 
 st.title("🧵 BelYarn Quality Intelligence Platform")
 
-# ==========================================
-# FILE UPLOAD
-# ==========================================
+# =====================================================
+# UPLOAD FILE
+# =====================================================
+
 uploaded_file = st.file_uploader(
-    "Upload Weekly Report",
+    "Upload Quality Report",
     type=["xlsx"]
 )
 
 if uploaded_file:
 
-    # ==========================================
-    # READ EXCEL
-    # ==========================================
-    xls = pd.ExcelFile(uploaded_file)
+    excel_file = pd.ExcelFile(uploaded_file)
 
-    stage = st.sidebar.selectbox(
+    page = st.sidebar.selectbox(
         "Select Stage",
-        xls.sheet_names
+        excel_file.sheet_names
     )
 
-    df = pd.read_excel(
-        uploaded_file,
-        sheet_name=stage
-    )
+    df = pd.read_excel(uploaded_file, sheet_name=page)
 
-    # ==========================================
-    # CLEAN COLUMNS
-    # ==========================================
+    # =====================================================
+    # CLEAN COLUMN NAMES
+    # =====================================================
+
     df.columns = (
         df.columns
         .astype(str)
         .str.strip()
-        .str.upper()
     )
 
-    # ==========================================
-    # NUMERIC CONVERSIONS
-    # ==========================================
+    # =====================================================
+    # NUMERIC COLUMNS
+    # =====================================================
+
     numeric_cols = [
+        "Act.Count",
+        "Count",
         "C.V",
         "CV",
+        "CVm",
+        "C.V m",
+        "THIN",
+        "THICK",
         "NEPS",
-        "NER%",
-        "RKM"
+        "IPI",
+        "H",
+        "RKM",
+        "ELG",
+        "Bforce",
+        "Twist"
     ]
 
     for col in numeric_cols:
@@ -66,342 +73,181 @@ if uploaded_file:
                 errors="coerce"
             )
 
-    if "NEPS" in df.columns:
-        df["NEPS"] = df["NEPS"].replace(
-            0,
-            pd.NA
-        )
-
-    # ==========================================
+    # =====================================================
     # FILTERS
-    # ==========================================
-    st.sidebar.header("🎯 Filters")
+    # =====================================================
 
-    if "M.C" in df.columns:
+    st.sidebar.header("Filters")
 
-        machine = st.sidebar.selectbox(
-            "Machine",
-            ["All"]
-            +
+    if "Product" in df.columns:
+
+        product = st.sidebar.selectbox(
+            "Product",
+            ["All"] +
             sorted(
-                df["M.C"]
-                .astype(str)
+                df["Product"]
                 .dropna()
+                .astype(str)
                 .unique()
-                .tolist()
             )
         )
 
-        if machine != "All":
-            df = df[
-                df["M.C"].astype(str)
-                == machine
-            ]
+        if product != "All":
+            df = df[df["Product"].astype(str) == product]
 
     if "LOT" in df.columns:
 
         lot = st.sidebar.selectbox(
             "LOT",
-            ["All"]
-            +
+            ["All"] +
             sorted(
                 df["LOT"]
-                .astype(str)
                 .dropna()
+                .astype(str)
                 .unique()
-                .tolist()
             )
         )
 
         if lot != "All":
-            df = df[
-                df["LOT"].astype(str)
-                == lot
-            ]
+            df = df[df["LOT"].astype(str) == lot]
 
     if "BLEND" in df.columns:
 
         blend = st.sidebar.selectbox(
             "Blend",
-            ["All"]
-            +
+            ["All"] +
             sorted(
                 df["BLEND"]
                 .dropna()
                 .astype(str)
                 .unique()
-                .tolist()
             )
         )
 
         if blend != "All":
-            df = df[
-                df["BLEND"].astype(str)
-                == blend
-            ]
+            df = df[df["BLEND"].astype(str) == blend]
 
-    # ==========================================
-    # HEADER
-    # ==========================================
-    st.header(f"📊 {stage}")
+    st.header(page)
 
-    # ==========================================
-    # KPI
-    # ==========================================
-    c1, c2, c3, c4 = st.columns(4)
+    # =====================================================
+    # KPI SECTION
+    # =====================================================
 
-    c1.metric(
-        "Records",
-        len(df)
-    )
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
 
-    if "C.V" in df.columns:
+    c1.metric("Records", len(df))
+
+    if "Product" in df.columns:
         c2.metric(
-            "CV Avg",
-            round(df["C.V"].mean(), 2)
-        )
-    elif "CV" in df.columns:
-        c2.metric(
-            "CV Avg",
-            round(df["CV"].mean(), 2)
+            "Products",
+            df["Product"].nunique()
         )
 
-    if "NEPS" in df.columns:
+    if "LOT" in df.columns:
         c3.metric(
-            "Neps Avg",
-            round(
-                df["NEPS"]
-                .dropna()
-                .mean(),
-                0
-            )
+            "Lots",
+            df["LOT"].nunique()
+        )
+
+    if "C.V m" in df.columns:
+        c4.metric(
+            "Avg CVm",
+            round(df["C.V m"].mean(), 2)
+        )
+
+    if "IPI" in df.columns:
+        c5.metric(
+            "Avg IPI",
+            round(df["IPI"].mean(), 1)
         )
 
     if "RKM" in df.columns:
-        c4.metric(
-            "RKM Avg",
-            round(
-                df["RKM"].mean(),
-                2
-            )
+        c6.metric(
+            "Avg RKM",
+            round(df["RKM"].mean(), 1)
         )
 
-    # ==========================================
-    # MACHINE RANKING
-    # ==========================================
-    cv_col = None
+    # =====================================================
+    # PRODUCT ANALYSIS
+    # =====================================================
 
-    if "C.V" in df.columns:
-        cv_col = "C.V"
-    elif "CV" in df.columns:
-        cv_col = "CV"
+    if "Product" in df.columns:
 
-    if (
-        "M.C" in df.columns
-        and
-        cv_col is not None
-    ):
+        st.subheader("Product Distribution")
 
-        agg_dict = {
-            cv_col: "mean"
-        }
-
-        if "NEPS" in df.columns:
-            agg_dict["NEPS"] = "mean"
-
-        if "NER%" in df.columns:
-            agg_dict["NER%"] = "mean"
-
-        ranking = (
-            df.groupby(
-                "M.C",
-                as_index=False
-            )
-            .agg(agg_dict)
-        )
-
-        top5 = ranking.nsmallest(
-            5,
-            cv_col
-        )
-
-        worst5 = ranking.nlargest(
-            5,
-            cv_col
-        )
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            st.subheader(
-                "🏆 Top 5 Machines"
-            )
-
-            st.dataframe(
-                top5,
-                use_container_width=True
-            )
-
-        with col2:
-
-            st.subheader(
-                "🔻 Worst 5 Machines"
-            )
-
-            st.dataframe(
-                worst5,
-                use_container_width=True
-            )
-
-        # ==========================================
-        # CV CHART
-        # ==========================================
-        st.subheader(
-            "📈 Average CV By Machine"
-        )
-
-        fig_cv = px.bar(
-            ranking.sort_values(cv_col),
-            x="M.C",
-            y=cv_col,
-            text_auto=".2f",
-            color=cv_col,
-            color_continuous_scale="RdYlGn_r"
+        fig = px.histogram(
+            df,
+            x="Product",
+            color="Product"
         )
 
         st.plotly_chart(
-            fig_cv,
+            fig,
             use_container_width=True
         )
 
-        # ==========================================
-        # NEPS CHART
-        # ==========================================
-        if "NEPS" in ranking.columns:
+    # =====================================================
+    # CVM
+    # =====================================================
 
-            st.subheader(
-                "🟠 Average Neps By Machine"
-            )
-
-            fig_neps = px.bar(
-                ranking.sort_values(
-                    "NEPS",
-                    ascending=False
-                ),
-                x="M.C",
-                y="NEPS",
-                text_auto=".0f",
-                color="NEPS",
-                color_continuous_scale="Reds"
-            )
-
-            st.plotly_chart(
-                fig_neps,
-                use_container_width=True
-            )
-
-        # ==========================================
-        # EFFICIENCY CHART
-        # ==========================================
-        if "NER%" in ranking.columns:
-
-            st.subheader(
-                "✅ Efficiency % By Machine"
-            )
-
-            fig_eff = px.bar(
-                ranking.sort_values(
-                    "NER%",
-                    ascending=False
-                ),
-                x="M.C",
-                y="NER%",
-                text_auto=".1f",
-                color="NER%",
-                color_continuous_scale="Greens"
-            )
-
-            st.plotly_chart(
-                fig_eff,
-                use_container_width=True
-            )
-
-    # ==========================================
-    # BLEND DISTRIBUTION
-    # ==========================================
-    if "BLEND" in df.columns:
-
-        st.subheader(
-            "🧵 Blend Distribution"
-        )
-
-        blend_chart = (
-            df["BLEND"]
-            .astype(str)
-            .value_counts()
-            .reset_index()
-        )
-
-        blend_chart.columns = [
-            "Blend",
-            "Count"
-        ]
-
-        fig_blend = px.pie(
-            blend_chart,
-            names="Blend",
-            values="Count",
-            hole=0.4
-        )
-
-        st.plotly_chart(
-            fig_blend,
-            use_container_width=True
-        )
-
-    # ==========================================
-    # EFFICIENCY BY BLEND
-    # ==========================================
     if (
-        "BLEND" in df.columns
-        and
-        "NER%" in df.columns
+        "Product" in df.columns and
+        "C.V m" in df.columns
     ):
 
-        st.subheader(
-            "📊 Efficiency By Blend"
-        )
+        st.subheader("CVm By Product")
 
-        blend_eff = (
+        chart = (
             df.groupby(
-                "BLEND",
+                "Product",
                 as_index=False
-            )["NER%"]
+            )["C.V m"]
             .mean()
         )
 
-        fig_blend_eff = px.bar(
-            blend_eff,
-            x="BLEND",
-            y="NER%",
-            text_auto=".1f",
-            color="NER%",
-            color_continuous_scale="Viridis"
+        fig = px.bar(
+            chart,
+            x="Product",
+            y="C.V m",
+            color="C.V m",
+            text_auto=".2f"
         )
 
         st.plotly_chart(
-            fig_blend_eff,
+            fig,
             use_container_width=True
         )
 
-    # ==========================================
-    # RAW DATA
-    # ==========================================
-    with st.expander(
-        "📋 Raw Data"
+    # =====================================================
+    # RKM
+    # =====================================================
+
+    if (
+        "Product" in df.columns and
+        "RKM" in df.columns
     ):
-        st.dataframe(
-            df,
+
+        st.subheader("RKM By Product")
+
+        chart = (
+            df.groupby(
+                "Product",
+                as_index=False
+            )["RKM"]
+            .mean()
+        )
+
+        fig = px.bar(
+            chart,
+            x="Product",
+            y="RKM",
+            color="RKM",
+            text_auto=".2f"
+        )
+
+        st.plotly_chart(
+            fig,
             use_container_width=True
         )
+
+    # ======

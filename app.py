@@ -137,7 +137,10 @@ if uploaded_file:
 
     c1, c2, c3, c4 = st.columns(4)
 
-    c1.metric("Records", len(df))
+    c1.metric(
+        "Records",
+        len(df)
+    )
 
     if "C.V" in df.columns:
 
@@ -169,11 +172,14 @@ if uploaded_file:
 
         c4.metric(
             "RKM Avg",
-            round(df["RKM"].mean(), 2)
+            round(
+                df["RKM"].mean(),
+                2
+            )
         )
 
     # =====================
-    # CARD ANALYSIS
+    # MACHINE ANALYSIS
     # =====================
 
     if (
@@ -183,10 +189,7 @@ if uploaded_file:
     ):
 
         ranking = (
-            df.groupby(
-                ["M.C", "LOT", "BLEND"],
-                as_index=False
-            )
+            df.groupby("M.C")
             .agg({
                 "C.V": "mean",
                 **(
@@ -195,59 +198,96 @@ if uploaded_file:
                     else {}
                 )
             })
+            .reset_index()
         )
 
-        st.subheader("🏆 Best CV")
+        col1, col2 = st.columns(2)
 
-        top_cv = ranking.nsmallest(
-            5,
-            "C.V"
-        )
+        with col1:
 
-        st.dataframe(
-            top_cv,
-            use_container_width=True
-        )
-
-        st.subheader("🔻 Worst CV")
-
-        worst_cv = ranking.nlargest(
-            5,
-            "C.V"
-        )
-
-        st.dataframe(
-            worst_cv,
-            use_container_width=True
-        )
-
-        if "NEPS" in ranking.columns:
-
-            st.subheader(
-                "🔥 Lowest Neps"
-            )
-
-            best_neps = (
-                ranking
-                .dropna(
-                    subset=["NEPS"]
-                )
-                .nsmallest(
-                    5,
-                    "NEPS"
-                )
-            )
+            st.subheader("🏆 Top 5 CV")
 
             st.dataframe(
-                best_neps,
+                ranking.nsmallest(
+                    5,
+                    "C.V"
+                ),
                 use_container_width=True
             )
 
-            st.subheader(
-                "🚨 Highest Neps"
+        with col2:
+
+            st.subheader("🔻 Worst 5 CV")
+
+            st.dataframe(
+                ranking.nlargest(
+                    5,
+                    "C.V"
+                ),
+                use_container_width=True
             )
 
-            worst_neps = (
-                ranking
-                .dropna(
-            
+        if "NEPS" in ranking.columns:
+
+            col3, col4 = st.columns(2)
+
+            with col3:
+
+                st.subheader(
+                    "🔥 Lowest Neps"
+                )
+
+                st.dataframe(
+                    ranking.nsmallest(
+                        5,
+                        "NEPS"
+                    ),
+                    use_container_width=True
+                )
+
+            with col4:
+
+                st.subheader(
+                    "🚨 Highest Neps"
+                )
+
+                st.dataframe(
+                    ranking.nlargest(
+                        5,
+                        "NEPS"
+                    ),
+                    use_container_width=True
+                )
+
+        st.subheader(
+            "📈 Average CV By Machine"
+        )
+
+        fig = px.bar(
+            ranking.sort_values(
+                "C.V"
+            ),
+            x="M.C",
+            y="C.V",
+            color="C.V",
+            text_auto=".2f",
+            color_continuous_scale="RdYlGn_r"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    # =====================
+    # RAW DATA
+    # =====================
+
+    with st.expander(
+        "📋 Raw Data"
+    ):
+
+        st.dataframe(
+            df,
+            use_container_width=True
+        )

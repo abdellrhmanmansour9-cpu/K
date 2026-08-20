@@ -43,9 +43,9 @@ if uploaded_file:
             pd.NA
         )
 
-    # ======================
+    # =====================
     # FILTERS
-    # ======================
+    # =====================
 
     st.sidebar.header("Filters")
 
@@ -53,20 +53,14 @@ if uploaded_file:
 
         machine = st.sidebar.selectbox(
             "Machine",
-            ["All"]
-            + sorted(
-                df["M.C"]
-                .astype(str)
-                .unique()
-                .tolist()
-            )
+            ["All"] +
+            sorted(df["M.C"].astype(str).unique())
         )
 
         if machine != "All":
 
             df = df[
-                df["M.C"]
-                .astype(str)
+                df["M.C"].astype(str)
                 == machine
             ]
 
@@ -74,20 +68,14 @@ if uploaded_file:
 
         lot = st.sidebar.selectbox(
             "LOT",
-            ["All"]
-            + sorted(
-                df["LOT"]
-                .astype(str)
-                .unique()
-                .tolist()
-            )
+            ["All"] +
+            sorted(df["LOT"].astype(str).unique())
         )
 
         if lot != "All":
 
             df = df[
-                df["LOT"]
-                .astype(str)
+                df["LOT"].astype(str)
                 == lot
             ]
 
@@ -95,47 +83,21 @@ if uploaded_file:
 
         blend = st.sidebar.selectbox(
             "Blend",
-            ["All"]
-            + sorted(
-                df["BLEND"]
-                .dropna()
-                .unique()
-                .tolist()
-            )
+            ["All"] +
+            sorted(df["BLEND"].dropna().unique())
         )
 
         if blend != "All":
 
             df = df[
-                df["BLEND"]
-                == blend
-            ]
-
-    if "Product" in df.columns:
-
-        product = st.sidebar.selectbox(
-            "Product",
-            ["All"]
-            + sorted(
-                df["Product"]
-                .dropna()
-                .unique()
-                .tolist()
-            )
-        )
-
-        if product != "All":
-
-            df = df[
-                df["Product"]
-                == product
+                df["BLEND"] == blend
             ]
 
     st.header(f"📊 {stage}")
 
-    # ======================
+    # =====================
     # KPI
-    # ======================
+    # =====================
 
     c1, c2, c3, c4 = st.columns(4)
 
@@ -148,20 +110,7 @@ if uploaded_file:
 
         c2.metric(
             "CV Avg",
-            round(
-                df["C.V"].mean(),
-                2
-            )
-        )
-
-    elif "C.V m" in df.columns:
-
-        c2.metric(
-            "CVm Avg",
-            round(
-                df["C.V m"].mean(),
-                2
-            )
+            round(df["C.V"].mean(), 2)
         )
 
     if "NEPS" in df.columns:
@@ -176,19 +125,28 @@ if uploaded_file:
             )
         )
 
-    if "RKM" in df.columns:
+    if "NER%" in df.columns:
+
+        ner = pd.to_numeric(
+            df["NER%"],
+            errors="coerce"
+        )
+
+        if ner.max() <= 1:
+
+            ner = ner * 100
 
         c4.metric(
-            "RKM Avg",
+            "NER Avg %",
             round(
-                df["RKM"].mean(),
-                2
+                ner.mean(),
+                1
             )
         )
 
-    # ======================
-    # CV CHART
-    # ======================
+    # =====================
+    # MACHINE RANKING
+    # =====================
 
     if (
         "M.C" in df.columns
@@ -196,32 +154,19 @@ if uploaded_file:
         "C.V" in df.columns
     ):
 
-        chart_df = (
+        ranking = (
             df.groupby("M.C")
             .agg({
-                "C.V": "mean"
+                "C.V": "mean",
+                "NEPS": "mean"
             })
             .reset_index()
         )
 
-        fig = px.bar(
-            chart_df,
-            x="M.C",
-            y="C.V",
-            color="C.V",
-            title="Average CV By Machine"
+        ranking["Score"] = (
+            ranking["C.V"] * 40
+            +
+            ranking["NEPS"] * 60
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    with st.expander(
-        "Raw Data"
-    ):
-
-        st.dataframe(
-            df,
-            use_container_width=True
-        )
+        best = ranking

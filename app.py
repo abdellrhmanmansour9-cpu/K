@@ -11,7 +11,7 @@ st.set_page_config(
 st.title("🧵 BelYarn Quality Intelligence Platform")
 
 uploaded_file = st.file_uploader(
-    "Upload Quality Report",
+    "Upload Weekly Report",
     type=["xlsx"]
 )
 
@@ -19,414 +19,175 @@ if uploaded_file:
 
     xls = pd.ExcelFile(uploaded_file)
 
-    page = st.sidebar.selectbox(
+    stage = st.sidebar.selectbox(
         "Select Stage",
         xls.sheet_names
     )
 
     df = pd.read_excel(
         uploaded_file,
-        sheet_name=page
+        sheet_name=stage
     )
 
-    df.columns = df.columns.astype(str).str.strip()
+    df.columns = df.columns.str.strip()
 
-    # -----------------------------
-    # Filters
-    # -----------------------------
+    # تنظيف النبس
+    if "NEPS" in df.columns:
+
+        df["NEPS"] = pd.to_numeric(
+            df["NEPS"],
+            errors="coerce"
+        )
+
+        df["NEPS"] = df["NEPS"].replace(
+            0,
+            pd.NA
+        )
+
+    # =====================
+    # FILTERS
+    # =====================
 
     st.sidebar.header("🎯 Filters")
 
-    filter_columns = [
-        "Product",
-        "LOT",
-        "BLEND",
-        "M.C"
-    ]
+    if "M.C" in df.columns:
 
-    for col in filter_columns:
-
-        if col in df.columns:
-
-            selected = st.sidebar.selectbox(
-                col,
-                ["All"] +
-                sorted(
-                    df[col]
-                    .dropna()
-                    .astype(str)
-                    .unique()
-                    .tolist()
-                )
+        machine = st.sidebar.selectbox(
+            "Machine",
+            ["All"] +
+            sorted(
+                df["M.C"]
+                .astype(str)
+                .unique()
+                .tolist()
             )
+        )
 
-            if selected != "All":
+        if machine != "All":
 
-                df = df[
-                    df[col]
-                    .astype(str)
-                    == selected
-                ]
+            df = df[
+                df["M.C"]
+                .astype(str)
+                == machine
+            ]
 
-    # -----------------------------
-    # Numeric Conversion
-    # -----------------------------
+    if "LOT" in df.columns:
 
-    numeric_cols = [
-        "COUNT",
-        "Act.Count",
-        "Twist",
-        "C.V",
-        "C.V m",
-        "NEPS",
-        "NER%",
-        "NOILS",
-        "THIN",
-        "THICK",
-        "IPI",
-        "H",
-        "RKM",
-        "ELG",
-        "Bforce"
-    ]
-
-    for col in numeric_cols:
-
-        if col in df.columns:
-
-            df[col] = pd.to_numeric(
-                df[col],
-                errors="coerce"
+        lot = st.sidebar.selectbox(
+            "LOT",
+            ["All"] +
+            sorted(
+                df["LOT"]
+                .astype(str)
+                .unique()
+                .tolist()
             )
+        )
 
-    st.header(f"📊 {page}")
+        if lot != "All":
 
-    # -----------------------------
+            df = df[
+                df["LOT"]
+                .astype(str)
+                == lot
+            ]
+
+    if "BLEND" in df.columns:
+
+        blend = st.sidebar.selectbox(
+            "Blend",
+            ["All"] +
+            sorted(
+                df["BLEND"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
+        )
+
+        if blend != "All":
+
+            df = df[
+                df["BLEND"] == blend
+            ]
+
+    if "Product" in df.columns:
+
+        product = st.sidebar.selectbox(
+            "Product",
+            ["All"] +
+            sorted(
+                df["Product"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
+        )
+
+        if product != "All":
+
+            df = df[
+                df["Product"] == product
+            ]
+
+    st.header(f"📊 {stage}")
+
+    # =====================
     # KPI
-    # -----------------------------
+    # =====================
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4 = st.columns(4)
 
     c1.metric(
         "Records",
         len(df)
     )
 
-    if "LOT" in df.columns:
-        c2.metric(
-            "Lots",
-            df["LOT"].nunique()
-        )
-
-    if "BLEND" in df.columns:
-        c3.metric(
-            "Blends",
-            df["BLEND"].nunique()
-        )
-
-    if "Product" in df.columns:
-        c4.metric(
-            "Products",
-            df["Product"].nunique()
-        )
-
-    if "M.C" in df.columns:
-        c5.metric(
-            "Machines",
-            df["M.C"].nunique()
-        )
-
-    # -----------------------------
-    # Card / Breaker / Finisher
-    # -----------------------------
-
     if "C.V" in df.columns:
 
-        st.subheader("📈 CV Analysis")
-
-        metric1, metric2 = st.columns(2)
-
-        metric1.metric(
-            "Average CV",
-            round(df["C.V"].mean(), 2)
-        )
-
-        if "NEPS" in df.columns:
-            metric2.metric(
-                "Average NEPS",
-                round(df["NEPS"].mean(), 0)
-            )
-
-        if "M.C" in df.columns:
-
-            chart = (
-                df.groupby(
-                    "M.C",
-                    as_index=False
-                )["C.V"]
-                .mean()
-            )
-
-            fig = px.bar(
-                chart,
-                x="M.C",
-                y="C.V",
-                color="C.V",
-                text_auto=".2f",
-                title="CV By Machine"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-    # -----------------------------
-    # NEPS
-    # -----------------------------
-
-    if (
-        "M.C" in df.columns
-        and
-        "NEPS" in df.columns
-    ):
-
-        chart = (
-            df.groupby(
-                "M.C",
-                as_index=False
-            )["NEPS"]
-            .mean()
-        )
-
-        fig = px.bar(
-            chart,
-            x="M.C",
-            y="NEPS",
-            color="NEPS",
-            text_auto=".0f",
-            title="NEPS By Machine"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    # -----------------------------
-    # Efficiency
-    # -----------------------------
-
-    if (
-        "M.C" in df.columns
-        and
-        "NER%" in df.columns
-    ):
-
-        chart = (
-            df.groupby(
-                "M.C",
-                as_index=False
-            )["NER%"]
-            .mean()
-        )
-
-        fig = px.bar(
-            chart,
-            x="M.C",
-            y="NER%",
-            color="NER%",
-            text_auto=".1f",
-            title="Efficiency By Machine"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    # -----------------------------
-    # Blend Analysis
-    # -----------------------------
-
-    if (
-        "BLEND" in df.columns
-        and
-        "NEPS" in df.columns
-    ):
-
-        chart = (
-            df.groupby(
-                "BLEND",
-                as_index=False
-            )["NEPS"]
-            .mean()
-        )
-
-        fig = px.bar(
-            chart,
-            x="BLEND",
-            y="NEPS",
-            color="NEPS",
-            title="NEPS By Blend"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    # -----------------------------
-    # Comber
-    # -----------------------------
-
-    if "NOILS" in df.columns:
-
-        st.subheader("🧶 Comber Analysis")
-
-        st.metric(
-            "Average NOILS",
+        c2.metric(
+            "CV Avg",
             round(
-                df["NOILS"].mean(),
+                df["C.V"].mean(),
                 2
             )
         )
 
-        if "M.C" in df.columns:
+    elif "C.V m" in df.columns:
 
-            chart = (
-                df.groupby(
-                    "M.C",
-                    as_index=False
-                )["NOILS"]
-                .mean()
+        c2.metric(
+            "CVm Avg",
+            round(
+                df["C.V m"].mean(),
+                2
             )
+        )
 
-            fig = px.bar(
-                chart,
-                x="M.C",
-                y="NOILS",
-                color="NOILS",
-                text_auto=".2f",
-                title="NOILS By Machine"
+    if "NEPS" in df.columns:
+
+        c3.metric(
+            "Neps Avg",
+            round(
+                df["NEPS"]
+                .dropna()
+                .mean(),
+                0
             )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-    # -----------------------------
-    # Winding
-    # -----------------------------
+        )
 
     if "RKM" in df.columns:
 
-        st.subheader("🧵 Winding Quality")
-
-        k1, k2, k3, k4 = st.columns(4)
-
-        k1.metric(
+        c4.metric(
             "RKM Avg",
-            round(df["RKM"].mean(), 2)
+            round(
+                df["RKM"].mean(),
+                2
+            )
         )
 
-        if "C.V m" in df.columns:
-            k2.metric(
-                "CVm Avg",
-                round(df["C.V m"].mean(), 2)
-            )
-
-        if "IPI" in df.columns:
-            k3.metric(
-                "IPI Avg",
-                round(df["IPI"].mean(), 1)
-            )
-
-        if "H" in df.columns:
-            k4.metric(
-                "Hairiness",
-                round(df["H"].mean(), 2)
-            )
-
-        # RKM By Product
-
-        if "Product" in df.columns:
-
-            chart = (
-                df.groupby(
-                    "Product",
-                    as_index=False
-                )["RKM"]
-                .mean()
-            )
-
-            fig = px.bar(
-                chart,
-                x="Product",
-                y="RKM",
-                color="RKM",
-                text_auto=".2f",
-                title="RKM By Product"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-        # CVm By Product
-
-        if (
-            "Product" in df.columns
-            and
-            "C.V m" in df.columns
-        ):
-
-            chart = (
-                df.groupby(
-                    "Product",
-                    as_index=False
-                )["C.V m"]
-                .mean()
-            )
-
-            fig = px.bar(
-                chart,
-                x="Product",
-                y="C.V m",
-                color="C.V m",
-                text_auto=".2f",
-                title="CVm By Product"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-        # RKM vs CVm
-
-        if "C.V m" in df.columns:
-
-            fig = px.scatter(
-                df,
-                x="C.V m",
-                y="RKM",
-                color="Product"
-                if "Product" in df.columns
-                else None,
-                title="RKM vs CVm"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-    # -----------------------------
-    # Machine Ranking
-    # -----------------------------
+    # =====================
+    # TOP 5 / WORST 5
+    # =====================
 
     if (
         "M.C" in df.columns
@@ -436,47 +197,88 @@ if uploaded_file:
 
         ranking = (
             df.groupby(
-                "M.C",
+                ["M.C"],
                 as_index=False
-            )["C.V"]
-            .mean()
+            )
+            .agg({
+                "C.V": "mean",
+                **(
+                    {"NEPS": "mean"}
+                    if "NEPS" in df.columns
+                    else {}
+                )
+            })
         )
 
-        c1, c2 = st.columns(2)
+        top5 = ranking.nsmallest(
+            5,
+            "C.V"
+        )
 
-        with c1:
+        worst5 = ranking.nlargest(
+            5,
+            "C.V"
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
 
             st.subheader(
-                "🏆 Top Machines"
+                "🏆 Top 5 Machines"
             )
 
             st.dataframe(
-                ranking.nsmallest(
-                    5,
-                    "C.V"
-                ),
+                top5,
                 use_container_width=True
             )
 
-        with c2:
+        with col2:
 
             st.subheader(
-                "🔻 Worst Machines"
+                "🔻 Worst 5 Machines"
             )
 
             st.dataframe(
-                ranking.nlargest(
-                    5,
-                    "C.V"
-                ),
+                worst5,
                 use_container_width=True
             )
 
-    # -----------------------------
-    # Raw Data
-    # -----------------------------
+        # =====================
+        # CHART
+        # =====================
 
-    with st.expander("📋 Raw Data"):
+        st.subheader(
+            "📈 Average CV By Machine"
+        )
+
+        fig = px.bar(
+            ranking.sort_values(
+                "C.V"
+            ),
+            x="M.C",
+            y="C.V",
+            text_auto=".2f",
+            color="C.V",
+            color_continuous_scale="RdYlGn_r"
+        )
+
+        fig.update_layout(
+            height=500
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    # =====================
+    # RAW DATA
+    # =====================
+
+    with st.expander(
+        "📋 Raw Data"
+    ):
 
         st.dataframe(
             df,

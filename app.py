@@ -20,7 +20,7 @@ if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
 
     stage = st.sidebar.selectbox(
-        "Select Stage",
+        "Stage",
         xls.sheet_names
     )
 
@@ -44,11 +44,11 @@ if uploaded_file:
             pd.NA
         )
 
-    # =====================
+    # ======================
     # FILTERS
-    # =====================
+    # ======================
 
-    st.sidebar.header("🎯 Filters")
+    st.sidebar.header("Filters")
 
     if "M.C" in df.columns:
 
@@ -69,6 +69,26 @@ if uploaded_file:
                 df["M.C"]
                 .astype(str)
                 == machine
+            ]
+
+    if "Product" in df.columns:
+
+        product = st.sidebar.selectbox(
+            "Product",
+            ["All"] +
+            sorted(
+                df["Product"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
+        )
+
+        if product != "All":
+
+            df = df[
+                df["Product"]
+                == product
             ]
 
     if "LOT" in df.columns:
@@ -108,33 +128,15 @@ if uploaded_file:
         if blend != "All":
 
             df = df[
-                df["BLEND"] == blend
+                df["BLEND"]
+                == blend
             ]
 
-    if "Product" in df.columns:
+    st.header(stage)
 
-        product = st.sidebar.selectbox(
-            "Product",
-            ["All"] +
-            sorted(
-                df["Product"]
-                .dropna()
-                .unique()
-                .tolist()
-            )
-        )
-
-        if product != "All":
-
-            df = df[
-                df["Product"] == product
-            ]
-
-    st.header(f"📊 {stage}")
-
-    # =====================
+    # ======================
     # KPI
-    # =====================
+    # ======================
 
     c1, c2, c3, c4 = st.columns(4)
 
@@ -185,9 +187,9 @@ if uploaded_file:
             )
         )
 
-    # =====================
-    # TOP 5 / WORST 5
-    # =====================
+    # ======================
+    # CV CHART
+    # ======================
 
     if (
         "M.C" in df.columns
@@ -195,76 +197,20 @@ if uploaded_file:
         "C.V" in df.columns
     ):
 
-        ranking = (
-            df.groupby(
-                ["M.C"],
-                as_index=False
-            )
+        chart_df = (
+            df.groupby("M.C")
             .agg({
-                "C.V": "mean",
-                **(
-                    {"NEPS": "mean"}
-                    if "NEPS" in df.columns
-                    else {}
-                )
+                "C.V": "mean"
             })
-        )
-
-        top5 = ranking.nsmallest(
-            5,
-            "C.V"
-        )
-
-        worst5 = ranking.nlargest(
-            5,
-            "C.V"
-        )
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            st.subheader(
-                "🏆 Top 5 Machines"
-            )
-
-            st.dataframe(
-                top5,
-                use_container_width=True
-            )
-
-        with col2:
-
-            st.subheader(
-                "🔻 Worst 5 Machines"
-            )
-
-            st.dataframe(
-                worst5,
-                use_container_width=True
-            )
-
-        # =====================
-        # CHART
-        # =====================
-
-        st.subheader(
-            "📈 Average CV By Machine"
+            .reset_index()
         )
 
         fig = px.bar(
-            ranking.sort_values(
-                "C.V"
-            ),
+            chart_df,
             x="M.C",
             y="C.V",
-            text_auto=".2f",
             color="C.V",
-            color_continuous_scale="RdYlGn_r"
-        )
-
-        fig.update_layout(
-            height=500
+            title="Average CV By Machine"
         )
 
         st.plotly_chart(
@@ -272,12 +218,8 @@ if uploaded_file:
             use_container_width=True
         )
 
-    # =====================
-    # RAW DATA
-    # =====================
-
     with st.expander(
-        "📋 Raw Data"
+        "Raw Data"
     ):
 
         st.dataframe(

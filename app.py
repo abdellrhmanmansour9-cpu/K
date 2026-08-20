@@ -31,6 +31,10 @@ if uploaded_file:
 
     df.columns = df.columns.str.strip()
 
+    # ==================
+    # CLEAN DATA
+    # ==================
+
     if "NEPS" in df.columns:
 
         df["NEPS"] = pd.to_numeric(
@@ -43,11 +47,11 @@ if uploaded_file:
             pd.NA
         )
 
-    # =====================
+    # ==================
     # FILTERS
-    # =====================
+    # ==================
 
-    st.sidebar.header("Filters")
+    st.sidebar.header("🎯 Filters")
 
     if "M.C" in df.columns:
 
@@ -65,7 +69,8 @@ if uploaded_file:
         if machine != "All":
 
             df = df[
-                df["M.C"].astype(str)
+                df["M.C"]
+                .astype(str)
                 == machine
             ]
 
@@ -85,7 +90,8 @@ if uploaded_file:
         if lot != "All":
 
             df = df[
-                df["LOT"].astype(str)
+                df["LOT"]
+                .astype(str)
                 == lot
             ]
 
@@ -131,9 +137,9 @@ if uploaded_file:
 
     st.header(f"📊 {stage}")
 
-    # =====================
+    # ==================
     # KPI
-    # =====================
+    # ==================
 
     c1, c2, c3, c4 = st.columns(4)
 
@@ -146,14 +152,20 @@ if uploaded_file:
 
         c2.metric(
             "CV Avg",
-            round(df["C.V"].mean(), 2)
+            round(
+                df["C.V"].mean(),
+                2
+            )
         )
 
     elif "C.V m" in df.columns:
 
         c2.metric(
             "CVm Avg",
-            round(df["C.V m"].mean(), 2)
+            round(
+                df["C.V m"].mean(),
+                2
+            )
         )
 
     if "NEPS" in df.columns:
@@ -178,22 +190,20 @@ if uploaded_file:
             )
         )
 
-    # =====================
-    # MACHINE ANALYSIS
-    # =====================
+    # ==================
+    # CARD ANALYSIS
+    # ==================
 
-    if (
-        "M.C" in df.columns
-        and
-        "C.V" in df.columns
-    ):
+    if "M.C" in df.columns and "C.V" in df.columns:
 
         ranking = (
             df.groupby("M.C")
             .agg({
                 "C.V": "mean",
                 **(
-                    {"NEPS": "mean"}
+                    {
+                        "NEPS": "mean"
+                    }
                     if "NEPS" in df.columns
                     else {}
                 )
@@ -205,7 +215,9 @@ if uploaded_file:
 
         with col1:
 
-            st.subheader("🏆 Top 5 CV")
+            st.subheader(
+                "🏆 Top 5 CV"
+            )
 
             st.dataframe(
                 ranking.nsmallest(
@@ -217,7 +229,9 @@ if uploaded_file:
 
         with col2:
 
-            st.subheader("🔻 Worst 5 CV")
+            st.subheader(
+                "🔻 Worst 5 CV"
+            )
 
             st.dataframe(
                 ranking.nlargest(
@@ -229,6 +243,10 @@ if uploaded_file:
 
         if "NEPS" in ranking.columns:
 
+            clean_neps = ranking.dropna(
+                subset=["NEPS"]
+            )
+
             col3, col4 = st.columns(2)
 
             with col3:
@@ -238,7 +256,7 @@ if uploaded_file:
                 )
 
                 st.dataframe(
-                    ranking.nsmallest(
+                    clean_neps.nsmallest(
                         5,
                         "NEPS"
                     ),
@@ -252,7 +270,7 @@ if uploaded_file:
                 )
 
                 st.dataframe(
-                    ranking.nlargest(
+                    clean_neps.nlargest(
                         5,
                         "NEPS"
                     ),
@@ -274,14 +292,18 @@ if uploaded_file:
             color_continuous_scale="RdYlGn_r"
         )
 
+        fig.update_layout(
+            height=500
+        )
+
         st.plotly_chart(
             fig,
             use_container_width=True
         )
 
-    # =====================
+    # ==================
     # RAW DATA
-    # =====================
+    # ==================
 
     with st.expander(
         "📋 Raw Data"

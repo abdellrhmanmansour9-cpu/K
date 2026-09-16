@@ -432,8 +432,35 @@ if uploaded_file:
         height=500
     )
 
-else:
+quality_score = round(
+    (
+        (100 - avg_cv * 4)
+        +
+        (100 - (avg_ipi / 3))
+        +
+        (avg_rkm * 4)
+        +
+        (avg_elg * 12)
+        +
+        (avg_bf / 4)
+    ) / 5,
+    1
+)
+
+st.markdown(
+    f"""
+    <div style='background:#16a34a;
+                padding:20px;
+                border-radius:15px;
+                text-align:center'>
+        <h1>⭐ Quality Index</h1>
+        <h1>{quality_score}%</h1>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
     st.info(
         "Upload Report Of Quality Control BeLYarn.xlsx"
     )
+else:

@@ -71,7 +71,9 @@ if uploaded_file:
 # CARD DASHBOARD
 # ==========================================
 
-if "Card" in stage:
+st.write(stage)
+
+if "Card" in str(stage):
 
     st.header("🧶 Card Quality Dashboard")
 

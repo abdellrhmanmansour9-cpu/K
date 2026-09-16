@@ -132,14 +132,50 @@ if uploaded_file:
 
     c1, c2, c3, c4, c5, c6 = st.columns(6)
 
-    c1.metric("Lots", total_lots)
-    c2.metric("CV.M", avg_cv)
-    c3.metric("IPI", avg_ipi)
-    c4.metric("RKM", avg_rkm)
-    c5.metric("ELG", avg_elg)
-    c6.metric("BForce", avg_bf)
+c1.metric("Lots", total_lots)
+c2.metric("CV.M", avg_cv)
+c3.metric("IPI", avg_ipi)
+c4.metric("RKM", avg_rkm)
+c5.metric("ELG", avg_elg)
+c6.metric("BForce", avg_bf)
 
-    st.markdown("---")
+# =====================================
+# QUALITY INDEX
+# =====================================
+
+quality_score = round(
+    (
+        (100 - avg_cv * 4)
+        +
+        (100 - (avg_ipi / 3))
+        +
+        (avg_rkm * 4)
+        +
+        (avg_elg * 12)
+        +
+        (avg_bf / 4)
+    ) / 5,
+    1
+)
+
+st.markdown(
+    f"""
+    <div style="
+        background:#16a34a;
+        padding:20px;
+        border-radius:20px;
+        text-align:center;
+        margin-top:20px;
+        margin-bottom:20px;
+    ">
+        <h2>⭐ Quality Index</h2>
+        <h1>{quality_score}%</h1>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.markdown("---")
 
     # =========================
     # GAUGE CHARTS
@@ -232,7 +268,39 @@ if uploaded_file:
         fig_bar,
         use_container_width=True
     )
+# =====================================
+# BEST / WORST LOTS
+# =====================================
 
+st.subheader("🏆 Best Lots")
+
+best_df = df.sort_values(
+    ["RKM", "Bforce"],
+    ascending=False
+).head(5)
+
+st.dataframe(
+    best_df[
+        ["LOT","RKM","ELG","Bforce","IPI"]
+    ],
+    use_container_width=True
+)
+
+st.subheader("⚠️ Worst Lots")
+
+worst_df = df.sort_values(
+    "IPI",
+    ascending=False
+).head(5)
+
+st.dataframe(
+    worst_df[
+        ["LOT","IPI","RKM","ELG","Bforce"]
+    ],
+    use_container_width=True
+)
+
+st.markdown("---")
     # =========================
     # RADAR CHART
     # =========================
@@ -354,7 +422,55 @@ if uploaded_file:
         )
 
     st.markdown("---")
+# =====================================
+# PASS / FAIL
+# =====================================
 
+status_list = []
+
+for _, row in df.iterrows():
+
+    score = 0
+
+    if row["IPI"] < df["IPI"].mean():
+        score += 1
+
+    if row["RKM"] > df["RKM"].mean():
+        score += 1
+
+    if row["ELG"] > df["ELG"].mean():
+        score += 1
+
+    if row["Bforce"] > df["Bforce"].mean():
+        score += 1
+
+    if row["C.V m"] < df["C.V m"].mean():
+        score += 1
+
+    status_list.append(
+        "PASS" if score >= 3 else "FAIL"
+    )
+
+df["Status"] = status_list
+
+fig_status = px.pie(
+    df,
+    names="Status",
+    color="Status",
+    title="Lots Status",
+    color_discrete_map={
+        "PASS":"green",
+        "FAIL":"red"
+    }
+)
+
+st.plotly_chart(
+    fig_status,
+    use_container_width=True
+)
+
+st.markdown("---")
+`
     # =========================
     # MIN AVG MAX
     # =========================
@@ -407,7 +523,9 @@ if uploaded_file:
     # =========================
     # DETAIL TABLE
     # =========================
-
+# =====================================
+# OUTLIERS
+# 
     st.subheader("📄 Detailed Results")
 
     show_cols = []

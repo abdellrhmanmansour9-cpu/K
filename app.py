@@ -67,7 +67,160 @@ if uploaded_file:
         )
 
         df = df[df["BLEND"].astype(str) == blend]
+# ==========================================
+# CARD DASHBOARD
+# ==========================================
 
+if "Card" in stage:
+
+    st.header("🧶 Card Quality Dashboard")
+
+    avg_cv = round(df["C.V"].mean(), 2)
+    avg_neps = round(df["NEPS"].mean(), 2)
+    avg_ner = round(df["NER%"].mean(), 2)
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Lots", len(df))
+    c2.metric("Avg CV", avg_cv)
+    c3.metric("Avg NEPS", avg_neps)
+    c4.metric("Avg NER%", avg_ner)
+
+    card_score = round(
+        (
+            (100 - avg_cv * 10) * 0.45
+            +
+            (100 - avg_neps / 2) * 0.35
+            +
+            avg_ner * 0.20
+        ),
+        1
+    )
+
+    st.success(
+        f"⭐ Card Quality Index : {card_score}%"
+    )
+
+    metric_df = pd.DataFrame({
+        "Metric": ["CV", "NEPS", "NER%"],
+        "Value": [avg_cv, avg_neps, avg_ner]
+    })
+
+    fig_bar = px.bar(
+        metric_df,
+        x="Metric",
+        y="Value",
+        color="Value",
+        text="Value",
+        title="Card Quality Overview"
+    )
+
+    st.plotly_chart(
+        fig_bar,
+        use_container_width=True
+    )
+
+    fig_cv = px.line(
+        df,
+        x="LOT",
+        y="C.V",
+        markers=True,
+        title="CV Trend"
+    )
+
+    st.plotly_chart(
+        fig_cv,
+        use_container_width=True
+    )
+
+    fig_neps = px.line(
+        df,
+        x="LOT",
+        y="NEPS",
+        markers=True,
+        title="NEPS Trend"
+    )
+
+    st.plotly_chart(
+        fig_neps,
+        use_container_width=True
+    )
+
+    fig_ner = px.line(
+        df,
+        x="LOT",
+        y="NER%",
+        markers=True,
+        title="NER% Trend"
+    )
+
+    st.plotly_chart(
+        fig_ner,
+        use_container_width=True
+    )
+
+    st.subheader("🏆 Best Card Lots")
+
+    best_df = df.sort_values(
+        ["NER%", "C.V"],
+        ascending=[False, True]
+    ).head(5)
+
+    st.dataframe(
+        best_df,
+        use_container_width=True
+    )
+
+    st.subheader("⚠️ Worst Card Lots")
+
+    worst_df = df.sort_values(
+        ["NEPS", "C.V"],
+        ascending=False
+    ).head(5)
+
+    st.dataframe(
+        worst_df,
+        use_container_width=True
+    )
+
+    st.subheader("🚨 Card Outliers")
+
+    outliers = df[
+        (
+            df["NEPS"]
+            >
+            (
+                df["NEPS"].mean()
+                +
+                df["NEPS"].std()
+            )
+        )
+        |
+        (
+            df["C.V"]
+            >
+            (
+                df["C.V"].mean()
+                +
+                df["C.V"].std()
+            )
+        )
+    ]
+
+    st.dataframe(
+        outliers,
+        use_container_width=True
+    )
+
+    st.subheader("📄 Card Details")
+
+    st.dataframe(
+        df,
+        use_container_width=True,
+        height=500
+    )
+
+    st.stop()
     cv_col = "C.V m"
     ipi_col = "IPI"
     rkm_col = "RKM"
